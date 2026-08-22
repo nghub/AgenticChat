@@ -404,8 +404,8 @@ The callback must match exactly, including scheme, hostname, port, path, and tra
 3. **Private uploads**: Attach an S3-compatible private bucket and set the `OBJECT_STORAGE_*` variables. Uploaded documents are encrypted at rest, tenant-scoped, and read by retryable ingestion workers.
 4. **Google login**: Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then add the exact production callback in Google Cloud.
 5. **Public chat rate limiting**: Upstash Redis is recommended for distributed enforcement. Without it, the app uses a bounded per-instance limiter so public chat remains available. Set `RATE_LIMIT_REQUIRE_DISTRIBUTED=true` if your deployment must fail closed when Redis is absent. `RATE_LIMIT_FAIL_OPEN=true` applies only when a configured Redis service becomes unavailable.
-6. **Apply migrations**: From a trusted CI job or a machine with the production `DATABASE_URL`, run `npm run db:deploy`. Apply this before the Vercel deployment so the running application always sees the expected schema.
-7. **Deploy**: Vercel runs `npm run build`, which generates Prisma and builds Next.js without coupling the build to a live database connection.
+6. **Apply migrations**: The checked-in `vercel.json` build command runs `npm run db:deploy` before `npm run build`, so a deployment cannot publish application code before its additive Prisma migrations have succeeded. For other hosts, run `npm run db:deploy` from trusted CI before promoting the release.
+7. **Deploy**: Vercel applies pending Prisma migrations, generates the Prisma client, and builds Next.js. A failed migration fails the deployment instead of publishing code against an outdated database schema.
 8. Configure authenticated five-minute jobs for `/api/internal/ingestion-jobs`, `/api/internal/webhooks`, and `/api/internal/maintenance`.
 9. Visit `/api/health`, then test registration, bot creation, ingestion, preview, publish/promotion, public embed, handoff, webhook delivery, `/admin` authorization, service API, and a tool approval separately.
 
