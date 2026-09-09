@@ -66,6 +66,10 @@ export default function EmbedChat({
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [hideSuggestions, setHideSuggestions] = useState(false);
+  // Starter questions are for a visitor who has not engaged yet. The first
+  // keystroke, a picked question, a sent message or a voice session hides
+  // them for good - they never come back mid-conversation.
+  const [engaged, setEngaged] = useState(false);
   const [language, setLanguage] = useState(defaultLocale);
   const [questions, setQuestions] = useState<string[]>(suggestedQuestions);
   const [leadFormOpen, setLeadFormOpen] = useState(false);
@@ -91,6 +95,10 @@ export default function EmbedChat({
   // through /api/public/chat keyed by this component's sessionId, so context
   // carries across text -> voice -> text with no extra plumbing.
   const AVATAR_VIDEO_ID = "sam-avatar";
+  const startVoice = () => {
+    setEngaged(true);
+    void avatar.start();
+  };
   const avatar = useAvatarSession({
     publicKey,
     origin,
@@ -186,6 +194,7 @@ export default function EmbedChat({
   const sendMessage = async (text?: string) => {
     const userText = (text ?? input).trim();
     if (!userText || loading || !online) return;
+    setEngaged(true);
     setInput("");
     setMessages((prev) => [...prev, { id: Date.now().toString(), role: "user", content: userText }]);
     setLoading(true);
@@ -343,7 +352,7 @@ export default function EmbedChat({
           images={avatarImages}
           compact={hasUserMessage}
           disabled={!online}
-          onStart={() => void avatar.start()}
+          onStart={startVoice}
           onEnd={() => void avatar.stop("user")}
           micMuted={avatar.micMuted}
           onToggleMic={avatar.toggleMic}
@@ -499,7 +508,7 @@ export default function EmbedChat({
 
       {/* Suggested questions strip — transparent, blends with chat background */}
       {!online && <div className="flex items-center justify-center gap-2 border-t bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status"><WifiOff className="h-3.5 w-3.5" /> {t.offlineBanner}</div>}
-      {!hideSuggestions && questions.length > 0 && (
+      {!hideSuggestions && !engaged && questions.length > 0 && (
         <div className="relative bg-gray-50 px-3 pt-2 pb-1 max-h-[40%] overflow-y-auto">
           <button
             type="button"
@@ -528,7 +537,10 @@ export default function EmbedChat({
             <input
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value && !engaged) setEngaged(true);
+                setInput(e.target.value);
+              }}
               placeholder={t.typeMessage}
               disabled={loading || !online}
               className={`w-full min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${avatarEnabled && avatar.mode === "TEXT" ? "pe-11" : ""}`}
@@ -537,7 +549,7 @@ export default function EmbedChat({
             {avatarEnabled && avatar.mode === "TEXT" && (
               <button
                 type="button"
-                onClick={() => void avatar.start()}
+                onClick={startVoice}
                 disabled={!online}
                 className="absolute end-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40"
                 aria-label={`Speak with ${botName}`}
