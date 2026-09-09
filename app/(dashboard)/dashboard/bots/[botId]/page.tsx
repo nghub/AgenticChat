@@ -18,6 +18,9 @@ import KnowledgeGapsTab from "@/components/dashboard/knowledge-gaps-tab";
 import OperationsTab from "@/components/dashboard/operations-tab";
 import EnvironmentsTab from "@/components/dashboard/environments-tab";
 import EcosystemTab from "@/components/dashboard/ecosystem-tab";
+import AgentTab from "@/components/dashboard/agent-tab";
+import { getAIConfigForBot } from "@/lib/ai/provider";
+import { configuredModel } from "@/lib/ai/cost";
 import { draftAwareBotConfig } from "@/lib/bots/versioning";
 import { botAccessWhere } from "@/lib/auth/workspace-access";
 
@@ -47,6 +50,7 @@ export default async function BotPage({ params }: { params: Promise<{ botId: str
 
   if (!bot) notFound();
   const draft = draftAwareBotConfig(bot);
+  const activeModel = configuredModel(await getAIConfigForBot(bot.id));
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -73,6 +77,7 @@ export default async function BotPage({ params }: { params: Promise<{ botId: str
         <div className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <TabsList className="w-max min-w-full gap-1">
           <TabsTrigger value="launch">Launch</TabsTrigger>
+          <TabsTrigger value="agent">Agent</TabsTrigger>
           <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
           <TabsTrigger value="evaluations">Evaluations</TabsTrigger>
           <TabsTrigger value="tools"><Zap className="mr-1 h-3.5 w-3.5" /> Tools</TabsTrigger>
@@ -91,6 +96,17 @@ export default async function BotPage({ params }: { params: Promise<{ botId: str
 
         <TabsContent value="launch">
           <LaunchTab botId={bot.id} />
+        </TabsContent>
+
+        <TabsContent value="agent">
+          <AgentTab
+            botId={bot.id}
+            botName={draft.name}
+            initial={draft.agentConfig}
+            legacySystemPrompt={draft.systemPrompt}
+            model={activeModel}
+            hasDraft={Boolean(bot.draftConfig)}
+          />
         </TabsContent>
 
         <TabsContent value="knowledge">
