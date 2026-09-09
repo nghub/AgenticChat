@@ -178,6 +178,8 @@ export default function EmbedChat({
     setInput("");
     setMessages((prev) => [...prev, { id: Date.now().toString(), role: "user", content: userText }]);
     setLoading(true);
+    // Typing while the avatar talks is a barge-in: stop her so the new answer is not queued.
+    if (avatar.mode === "VIDEO") void avatar.interrupt();
 
     try {
       const res = await fetch("/api/public/chat", {
@@ -328,7 +330,7 @@ export default function EmbedChat({
           compact={hasUserMessage}
           disabled={!online}
           onStart={() => void avatar.start()}
-          onEnd={() => void avatar.stop()}
+          onEnd={() => void avatar.stop("user")}
           micMuted={avatar.micMuted}
           onToggleMic={avatar.toggleMic}
           sessionStartedAt={avatar.sessionStartedAt}

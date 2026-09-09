@@ -110,6 +110,12 @@ export class AnamProvider implements AvatarProvider {
     return () => this.client.removeListener(AnamEvent.MESSAGE_HISTORY_UPDATED, listener);
   }
 
+  onInterrupted(handler: () => void): Unsubscribe {
+    const listener = () => handler();
+    this.client.addListener(AnamEvent.TALK_STREAM_INTERRUPTED, listener);
+    return () => this.client.removeListener(AnamEvent.TALK_STREAM_INTERRUPTED, listener);
+  }
+
   onStatus(handler: (status: AvatarStatus) => void): Unsubscribe {
     // Map the SDK's connection lifecycle and turn-taking onto our status enum.
     // Both of these fire before a frame is painted, so they are reported as

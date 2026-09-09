@@ -23,6 +23,9 @@ const chatSchema = z.object({
   sessionId: z.string().optional(),
   origin: z.string().url().max(500).optional(),
   locale: z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/).max(10).optional(),
+  // How the visitor produced this turn. VOICE = transcript from the avatar
+  // session; defaults to TEXT so existing widgets need no change.
+  source: z.enum(["TEXT", "VOICE"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { publicKey, message, sessionId, origin, locale } = chatSchema.parse(body);
+    const { publicKey, message, sessionId, origin, locale, source = "TEXT" } = chatSchema.parse(body);
 
     const limitConfig = getPublicChatRateLimitConfig();
 
@@ -127,7 +130,7 @@ export async function POST(req: NextRequest) {
     }));
 
     await db.message.create({
-      data: { conversationId: conversation.id, role: "USER", content: message },
+      data: { conversationId: conversation.id, role: "USER", content: message, source },
     });
 
     const startedAt = Date.now();
@@ -140,6 +143,7 @@ export async function POST(req: NextRequest) {
         conversationId: conversation.id,
         role: "ASSISTANT",
         content: result.answer,
+        source, // the answer to a spoken turn was spoken back
         isGrounded: result.isGrounded,
         isRefused: result.isRefused,
         sourceChunkIds: result.sources.map((s) => s.id),

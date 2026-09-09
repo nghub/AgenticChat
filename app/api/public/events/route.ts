@@ -5,7 +5,28 @@ import { db } from "@/lib/db/client";
 import { getClientIp, rateLimit } from "@/lib/security/rate-limit";
 import { isOriginAllowed, normalizeRequestOrigin } from "@/lib/bots/origin-policy";
 
-const schema = z.object({ publicKey: z.string().min(1), type: z.enum(["embed.loaded", "widget.opened", "chat.started"]), sessionId: z.string().max(120).optional(), origin: z.string().url().max(500).optional() });
+const schema = z.object({
+  publicKey: z.string().min(1),
+  type: z.enum([
+    "embed.loaded",
+    "widget.opened",
+    "chat.started",
+    // Voice avatar funnel + latency splits (see docs/avatar-poc/HANDOFF.md).
+    "avatar.cta_clicked",
+    "avatar.connected",
+    "avatar.first_response",
+    "avatar.interrupted",
+    "avatar.session_ended",
+    "avatar.session_failed",
+  ]),
+  sessionId: z.string().max(120).optional(),
+  origin: z.string().url().max(500).optional(),
+  // Small, flat, scalar-only: latency numbers and short labels, never free text.
+  metadata: z
+    .record(z.string().max(40), z.union([z.string().max(120), z.number().finite(), z.boolean()]))
+    .refine((m) => Object.keys(m).length <= 12, "Too many metadata keys")
+    .optional(),
+});
 
 function requestOrigin(req: NextRequest): string | undefined {
   const candidate = req.headers.get("origin") || req.headers.get("referer");
@@ -30,6 +51,7 @@ export async function POST(req: NextRequest) {
         workspaceId: bot.workspaceId,
         origin,
         sessionHash: data.sessionId ? createHash("sha256").update(`${process.env.AUDIT_HASH_SALT || process.env.JWT_SECRET || "obc"}:${data.sessionId}`).digest("hex").slice(0, 40) : undefined,
+        metadata: data.metadata,
       },
     });
     return NextResponse.json({ success: true }, { status: 202 });

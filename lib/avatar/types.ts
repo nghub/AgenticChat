@@ -63,4 +63,7 @@ export interface AvatarProvider {
 
   /** Lifecycle/status changes for driving the UI state machine. */
   onStatus(handler: (status: AvatarStatus) => void): Unsubscribe;
+
+  /** Fires when an utterance was cut off - by the visitor speaking or by interrupt(). */
+  onInterrupted(handler: () => void): Unsubscribe;
 }

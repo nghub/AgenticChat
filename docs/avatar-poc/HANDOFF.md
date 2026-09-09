@@ -19,7 +19,7 @@ Do NOT build a "video AI agent". Do NOT add LiveKit in the POC.
 - Agent entry point: `lib/agents/agent-chat.ts` → `agenticChat(botId, userMessage, conversationId, history, options)`. Runs RAG retrieval, a tool loop (`MAX_TOOL_ITERATIONS = 5`), grounding/refusal **enforced in code**, cost tracking, i18n.
 - Public chat: `app/api/public/chat/route.ts` — zod input `{ publicKey, message, sessionId?, origin?, locale? }`, returns `NextResponse.json({ answer, sessionId, messageId, isRefused, locale, citations, handoff })`. Loads history by `sessionId` (`take: 12`). Applies rate limit, origin allow-list, production-approval, experiment bucketing, knowledge-gap recording, handoff evaluation.
 - **No streaming exists anywhere.** `agenticChat` awaits a full result; both chat routes return JSON. Grep for `text/event-stream|ReadableStream|.stream(` in app/lib/components = zero hits.
-- Data model: `Conversation.sessionId @unique` (this is the shared conversation id across text↔voice). `Message` has `role`/`content`/`conversationId` but **no `source` field**.
+- Data model: `Conversation.sessionId @unique` (this is the shared conversation id across text↔voice). `Message.source` (`TEXT` | `VOICE`, default `TEXT`) added 2026-09-09 (migration `add_message_source`); the assistant turn carries the source of the turn it answers.
 - Reusable helpers (import paths):
   - `@/lib/db/client` → `db`
   - `@/lib/security/rate-limit` → `getClientIp`, `rateLimit`, `rateLimitHeaders`, `getPublicChatRateLimitConfig`
@@ -102,11 +102,11 @@ Endpoint, `createClient`, `streamToVideoElement`, `stopStreaming`,
 |---|---|---|---|
 | 1 | Avatar renders — **DONE 2026-09-09** | files above + `AvatarPanel`, `SpeakWithPiperButton`, state machine TEXT→CONNECTING→VIDEO→ENDING→TEXT; hard-coded greeting; End cleans up mic/session | 1 day |
 | 2 | Existing brain speaks — **DONE 2026-09-09** | typed message → `/api/public/chat` → `provider.speak(answer)`. Verified live with Gemini-only config; see *Latency* below | 1 day |
-| 3 | Speech in — **round trip confirmed by a human 2026-09-09** (mic → transcript → agent → spoken answer). `Message.source` migration still to do | transcript → `/api/public/chat` → speak. Add Prisma migration `Message.source` enum `TEXT/VOICE`; extend chat route zod with `source?` and persist it | 1 day |
+| 3 | Speech in — **DONE 2026-09-09**: round trip confirmed by a human (mic → transcript → agent → spoken answer); `Message.source` enum `TEXT/VOICE` migrated, accepted by the chat route (`source?`), persisted on both turns, shown in the logs viewer | transcript → `/api/public/chat` → speak. Add Prisma migration `Message.source` enum `TEXT/VOICE`; extend chat route zod with `source?` and persist it | 1 day |
 | 3b | Avatar card UX (added) — **DONE 2026-09-09** | Face-first card modelled on Salesforce's "Piper": static portrait + overlaid CTA → compact pill once the visitor has spoken/typed → "Connecting you to …" → live video with who-is-talking mic pill (Listening / Speaking / Muted), mute toggle, countdown, End. Second entry point: mic icon in the input. Plain-text assistant messages, small gray visitor bubbles | 0.5 day |
-| 4 | Shared context test | "500 employees" test (text→video); revisit `take: 12` history cap if needed | 0.5 day |
-| 5 | Interruption + cleanup | barge-in stops talk stream; End releases everything | 1 day |
-| 6 | Video→text continuity, errors, analytics | events: avatar_cta_clicked, avatar_connected, avatar_first_response, avatar_interrupted, avatar_session_ended, avatar_session_failed; latency splits T0–T4 | 1–1.5 days |
+| 4 | Shared context test — **DONE 2026-09-09** | "500 employees" test passes text→voice→text on one session. The history cap was fine; the block was the refusal protocol, which the model over-applied to the visitor's own words. See *Milestone 4 finding* below | 0.5 day |
+| 5 | Interruption + cleanup — **DONE 2026-09-09** | Voice barge-in is the vendor's VAD (`TALK_STREAM_INTERRUPTED`); typing while the avatar talks calls `interrupt()` (`client.interruptPersona()`, which raises no event, so it is tracked client-side). End, cap, vendor close and unmount all release mic + session | 1 day |
+| 6 | Video→text continuity, errors, analytics — **DONE 2026-09-09** | Events go through the existing `/api/public/events` (rate-limited, origin-checked, session id hashed) with a bounded `metadata` object: `avatar.cta_clicked`, `avatar.connected {tokenMs, connectMs}`, `avatar.first_response {firstResponseMs}`, `avatar.interrupted {by: voice\|keyboard}`, `avatar.session_ended {reason, durationMs}`, `avatar.session_failed {stage, message}`. Measured: token ≈200ms, first frame 0.9–1.6s, first speech ≈2.1s from click | 1–1.5 days |
 | — | **Streaming refactor (optional, "good path")** | SSE `/api/public/chat/stream`; stream only the final generation after tools resolve; swap `provider.speak` → `speakStream` | +2–4 days |
 
 Fast path total ≈ 5–7 days. Good path ≈ 7–10 days.
@@ -125,6 +125,21 @@ Fast path total ≈ 5–7 days. Good path ≈ 7–10 days.
 | ERROR | any failure | back to TEXT + amber line; text chat unaffected |
 
 Only two things start a (billed) session: the pill on the card and the mic icon in the input. Nothing on mount.
+
+## Milestone 4 finding: the grounding gate vs. what the visitor said
+
+The "500 employees" test failed at first, and not for the reason the plan
+guessed. History was fine (`take: 12`, same conversation, both turns
+persisted) and retrieval was fine (0.47–0.66 similarity against a 0.18
+threshold — a contextual-retrieval patch was tried, measured, and reverted).
+The model itself emitted the refusal token: the protocol says "business-specific
+question not supported by the context → token", and it applied that to
+"how many employees did I say", which is the visitor's own words, not a
+business claim. `lib/rag/refusal.ts` now says so explicitly: what the visitor
+told you earlier may be repeated or built on without a source; mixed messages
+answer the visitor's part from the conversation and the business part from the
+context; the token is for messages where no part can be answered. Business
+grounding is unchanged.
 
 ## Latency (learned in milestone 2 — read before picking a model)
 

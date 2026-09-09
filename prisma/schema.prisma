@@ -249,6 +249,9 @@ model Message {
   outputTokens     Int?
   estimatedCostUsd Decimal?         @db.Decimal(12, 6)
   retrievalTrace   Json?
+  // How the visitor produced this turn (typed vs spoken via the avatar).
+  // Assistant turns carry the source of the turn they answer.
+  source           MessageSource    @default(TEXT)
 }
 
 model BotVersion {
@@ -365,6 +368,11 @@ enum IngestionStatus {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+enum MessageSource {
+  TEXT
+  VOICE
 }
 
 enum LeadStatus {

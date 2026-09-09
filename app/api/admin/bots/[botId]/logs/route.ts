@@ -32,7 +32,7 @@ export async function GET(
       include: {
         messages: {
           orderBy: { createdAt: "asc" },
-          select: { id: true, role: true, content: true, isGrounded: true, isRefused: true, createdAt: true },
+          select: { id: true, role: true, content: true, isGrounded: true, isRefused: true, createdAt: true, source: true },
         },
         notes: { orderBy: { createdAt: "asc" }, include: { author: { select: { name: true, email: true } } } },
         leads: { orderBy: { createdAt: "desc" }, take: 1, select: { name: true, email: true, phone: true, company: true } },

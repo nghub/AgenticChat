@@ -19,6 +19,21 @@ import { createAvatarProvider, type AvatarProvider, type AvatarStatus } from "@/
 /** Milestone-1 state machine the UI renders against: TEXT -> CONNECTING -> VIDEO -> ENDING -> TEXT. */
 export type AvatarMode = "TEXT" | "CONNECTING" | "VIDEO" | "ENDING";
 
+type StopReason = "user" | "vendor" | "unmount" | "error";
+
+/**
+ * Funnel + latency events, recorded through the existing /api/public/events
+ * endpoint (rate-limited, origin-checked, session id hashed server-side).
+ *   T0 CTA clicked  T1 token minted  T2 first frame  T3 first speech  T4 ended
+ */
+type AvatarEvent =
+  | "avatar.cta_clicked"
+  | "avatar.connected"
+  | "avatar.first_response"
+  | "avatar.interrupted"
+  | "avatar.session_ended"
+  | "avatar.session_failed";
+
 interface UseAvatarSessionArgs {
   publicKey: string;
   origin?: string;
@@ -66,10 +81,22 @@ async function waitForElement(id: string, timeoutMs = 1500): Promise<void> {
 
 export function useAvatarSession(args: UseAvatarSessionArgs) {
   const [status, setStatus] = useState<AvatarStatus>("idle");
+  const statusRef = useRef<AvatarStatus>("idle");
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   const [error, setError] = useState<string | null>(null);
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [maxSessionSeconds, setMaxSessionSeconds] = useState<number | null>(null);
   const [micMuted, setMicMuted] = useState(false);
+  // Always read the freshest args (sessionId, locale, origin) at event time
+  // rather than whatever render start() happened to be called from. This is
+  // what keeps text->voice->text context on the SAME conversation.
+  const argsRef = useRef(args);
+  useEffect(() => {
+    argsRef.current = args;
+  });
+
   const providerRef = useRef<AvatarProvider | null>(null);
   const unsubsRef = useRef<Array<() => void>>([]);
   const stoppingRef = useRef(false);
@@ -81,18 +108,25 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
   // rectangle. The last held status is applied once the frame lands.
   const videoReadyRef = useRef(false);
   const pendingStatusRef = useRef<AvatarStatus | null>(null);
+  // Latency splits, ms since epoch. Reset per session.
+  const tRef = useRef<{ t0: number; t1?: number; t2?: number; t3?: number }>({ t0: 0 });
 
-  // Always read the freshest args (sessionId, locale, origin) at event time
-  // rather than whatever render start() happened to be called from. This is
-  // what keeps text->voice->text context on the SAME conversation.
-  const argsRef = useRef(args);
-  useEffect(() => {
-    argsRef.current = args;
-  });
+  const track = useCallback((type: AvatarEvent, metadata?: Record<string, string | number | boolean>) => {
+    const a = argsRef.current;
+    void fetch("/api/public/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicKey: a.publicKey, type, sessionId: a.getSessionId(), origin: a.origin, metadata }),
+      keepalive: true,
+    }).catch(() => undefined); // analytics must never affect the session
+  }, []);
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(async (reason: StopReason = "user") => {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
+    if (tRef.current.t2) {
+      track("avatar.session_ended", { reason, durationMs: Date.now() - tRef.current.t2 });
+    }
     if (connectedFallbackRef.current) clearTimeout(connectedFallbackRef.current);
     connectedFallbackRef.current = null;
     videoReadyRef.current = false;
@@ -110,12 +144,15 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       setStatus("idle"); // back to text mode - conversation state is untouched
       stoppingRef.current = false;
     }
-  }, []);
+  }, [track]);
 
   const start = useCallback(async () => {
     if (providerRef.current) return; // a session is already live
     setError(null);
     setStatus("connecting");
+    tRef.current = { t0: Date.now() };
+    track("avatar.cta_clicked");
+    let stage: "token" | "connect" | "greeting" = "token";
     try {
       const a = argsRef.current;
 
@@ -135,6 +172,8 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       }
       const { sessionToken, maxSessionSeconds: cap } = await res.json();
       setMaxSessionSeconds(typeof cap === "number" ? cap : null);
+      tRef.current.t1 = Date.now();
+      stage = "connect";
 
       // 2) Build the vendor-neutral provider and connect the video element.
       const provider = await createAvatarProvider("anam", sessionToken);
@@ -145,12 +184,16 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
           // The vendor ended it (server-side cap, network drop): release the
           // mic and fall back to text instead of leaving a dead panel up.
           if (next === "closed") {
-            void stop();
+            void stop("vendor");
             return;
           }
           if (next === "error") {
             setStatus(next);
             return;
+          }
+          if (next === "speaking" && videoReadyRef.current && !tRef.current.t3) {
+            tRef.current.t3 = Date.now();
+            track("avatar.first_response", { firstResponseMs: tRef.current.t3 - tRef.current.t0 });
           }
           if (!videoReadyRef.current) {
             // Vendor "connected" here means the connection, not a frame - the
@@ -162,6 +205,11 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
           setStatus(next);
         })
       );
+
+      // Voice barge-in: the vendor's VAD cut the avatar off because the
+      // visitor started talking. Keyboard barge-ins are tracked in interrupt()
+      // because interruptPersona() does not raise this event.
+      unsubsRef.current.push(provider.onInterrupted(() => track("avatar.interrupted", { by: "voice" })));
 
       // 3) Route every finalized transcript through the EXISTING agent.
       unsubsRef.current.push(
@@ -178,6 +226,7 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
                 sessionId: live.getSessionId(),
                 origin: live.origin,
                 locale: live.locale,
+                source: "VOICE", // persisted on the Message row
               }),
             });
             const data = await chatRes.json();
@@ -213,6 +262,13 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
         connectedFallbackRef.current = null;
         const held = pendingStatusRef.current;
         pendingStatusRef.current = null;
+        const t = tRef.current;
+        t.t2 = Date.now();
+        track("avatar.connected", { tokenMs: (t.t1 ?? t.t2) - t.t0, connectMs: t.t2 - t.t0 });
+        if (held === "speaking" && !t.t3) {
+          t.t3 = t.t2;
+          track("avatar.first_response", { firstResponseMs: t.t3 - t.t0 });
+        }
         setStatus(held === "speaking" || held === "listening" ? held : "connected");
       };
       const videoEl = document.getElementById(a.videoElementId) as
@@ -222,15 +278,17 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       else videoEl?.addEventListener("loadeddata", markVideoReady, { once: true });
       connectedFallbackRef.current = setTimeout(markVideoReady, 15000);
 
+      stage = "greeting";
       if (a.greeting) await provider.speak(a.greeting);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Voice mode could not start.";
       console.error("avatar start failed:", err);
-      await stop();
+      track("avatar.session_failed", { stage, message: message.slice(0, 120) });
+      await stop("error");
       setError(message);
       setStatus("error");
     }
-  }, [stop]);
+  }, [stop, track]);
 
   /**
    * Milestone 2: the answer to a TYPED message is spoken too. The text list
@@ -246,6 +304,26 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       console.error("avatar speak failed:", err);
     }
   }, []);
+
+  /**
+   * Barge-in from the keyboard: cut the avatar off so the typed question's
+   * answer is not queued behind the rest of the previous one. Voice barge-in is
+   * handled by the vendor's own VAD; both surface as onInterrupted.
+   */
+  const interrupt = useCallback(async () => {
+    const provider = providerRef.current;
+    if (!provider) return;
+    try {
+      await provider.interrupt();
+      // Only a real cut-off counts; interrupting silence is a no-op.
+      if (statusRef.current === "speaking") {
+        track("avatar.interrupted", { by: "keyboard" });
+        setStatus("connected"); // the vendor sends no event for this path
+      }
+    } catch (err) {
+      console.error("avatar interrupt failed:", err);
+    }
+  }, [track]);
 
   /** Mute/unmute the visitor's mic mid-session. The session and the video stay up. */
   const toggleMic = useCallback(() => {
@@ -263,11 +341,11 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
   // Widget closed mid-call: release the mic and the billed session.
   useEffect(() => {
     return () => {
-      void stop();
+      void stop("unmount");
     };
   }, [stop]);
 
   const mode = useMemo(() => modeFor(status), [status]);
 
-  return { status, mode, error, start, stop, speak, micMuted, toggleMic, sessionStartedAt, maxSessionSeconds };
+  return { status, mode, error, start, stop, speak, interrupt, micMuted, toggleMic, sessionStartedAt, maxSessionSeconds };
 }
