@@ -59,6 +59,15 @@ UNCERTAIN IDENTIFIERS: if a SKU or order number looks garbled, incomplete or unl
 
 ESCALATE TO A HUMAN (offer the support contact details) for suspected fraud or counterfeits, product-safety concerns or recalls, billing disputes, account takeover, legal threats, unresolved seller disputes, anything the sources do not cover, and whenever the person asks for a person.
 
+ORDER HELP (tools): for anything about an order the customer already placed - a faulty item, a return, "where is my order" - you have two tools. Flow:
+1. If you do not have the order number yet, ask for it in one short question ("Sure! What's your order number? It starts with ORD-.") and stop there.
+2. With the order number, call get_order. Never guess or invent order details; if the order is not found, say so and ask them to double-check the number.
+3. Work out the reason from what they told you: faulty/broken/not working -> "defective"; don't want it / changed mind -> "changed_mind"; wrong product -> "wrong_item"; arrived damaged -> "damaged_in_transit". Then call create_return_request with the order number, the SKU from the order and that reason. Do this in the same turn as the lookup when you already know the reason.
+4. Relay the tool's decision - it applies the return window, you do not decide it:
+   - accepted -> lead with "Good news" - it's still within the N-day return window - give the RMA number and the instructions.
+   - declined, outside the window -> say sorry, it's N days since delivery and the window is M days, so you can't accept the return; for a faulty item offer a warranty case, otherwise offer to send it to customer support for human review. Never promise an exception.
+5. Sound like a person who just looked something up: ONLY in the turn where you report what a tool returned, begin with one natural filler such as "Okay, umm, let me see... found it." or "Aaa, here it is." - one, not several - then the answer. Never use a filler when you are asking for the order number or answering without a lookup.
+
 VOICE: answers may be spoken aloud, so keep them short and natural; lead with the answer, then one or two supporting details.`;
 
 async function main() {
@@ -127,6 +136,64 @@ async function main() {
     console.log(`knowledge "${name}" ${source.status}, ${chunks} chunk(s)`);
     sourceIds.push(source.id);
   }
+
+  // Catalogue addendum as a manual source: the toothbrush the mock orders use.
+  const ADDENDUM = "Catalogue addendum (DEN-051)";
+  let addendum = await db.knowledgeSource.findFirst({ where: { botId: bot.id, name: ADDENDUM } });
+  if (!addendum) {
+    addendum = await db.knowledgeSource.create({
+      data: {
+        botId: bot.id, type: "MANUAL", name: ADDENDUM,
+        metadata: { content: "DEN-051 Soft-Bristle Adult Toothbrush. Category: Preventive. Package: pack of 12. POC price: $18.95. Stock: 60. Return policy: 30 days from delivery. Unopened packs may be returned for a full refund. A faulty or defective toothbrush is handled as a defect claim within the same 30 days and is replaced or refunded; after 30 days contact customer support. Opened packs that are not faulty cannot be returned for hygiene reasons." },
+      },
+    });
+  }
+  if (addendum.status !== "COMPLETED") {
+    await ingestKnowledgeSource(addendum.id);
+    addendum = (await db.knowledgeSource.findUnique({ where: { id: addendum.id } }))!;
+  }
+  if (addendum.status !== "COMPLETED") throw new Error(`${ADDENDUM}: ingestion ended in ${addendum.status}: ${addendum.errorMessage}`);
+  sourceIds.push(addendum.id);
+  console.log(`knowledge "${ADDENDUM}" ${addendum.status}`);
+
+  // Agent tools against the POC order system (app/api/mock). The decision to
+  // accept or decline a return is made by that API from the SKU's window.
+  const appUrl = process.env.APP_URL || "http://localhost:3000";
+  const appHost = new URL(appUrl).hostname;
+  const tools = [
+    {
+      name: "get_order",
+      description: "Look up an order the customer already placed by its order number (format ORD-1234). Returns the customer name, delivery date, days since delivery, and each item's SKU, name, price, return window and whether it is still within it. Use before answering any question about a specific order, return, refund or faulty item.",
+      method: "GET",
+      endpoint: `${appUrl}/api/mock/orders/{orderNumber}`,
+      riskTier: "READ_ONLY" as const,
+      inputSchema: { type: "object", properties: { orderNumber: { type: "string", description: "The order number, e.g. ORD-1001" } }, required: ["orderNumber"] },
+    },
+    {
+      name: "create_return_request",
+      description: "Open a return request for one item on an order. The order system applies the item's return window and replies accepted (with an RMA number and instructions) or declined (with the reason and the recommended next step). Call only after get_order, with the SKU from the order and the customer's reason.",
+      method: "POST",
+      endpoint: `${appUrl}/api/mock/returns`,
+      riskTier: "WRITE" as const,
+      inputSchema: {
+        type: "object",
+        properties: {
+          orderNumber: { type: "string", description: "The order number, e.g. ORD-1001" },
+          sku: { type: "string", description: "The SKU of the item being returned, from the order" },
+          reason: { type: "string", enum: ["defective", "changed_mind", "wrong_item", "damaged_in_transit"], description: "Why the customer is returning it" },
+          notes: { type: "string", description: "What the customer said, in one sentence" },
+        },
+        required: ["orderNumber", "sku", "reason"],
+      },
+    },
+  ];
+  for (const tool of tools) {
+    const existing = await db.tool.findFirst({ where: { botId: bot.id, name: tool.name } });
+    const data = { ...tool, botId: bot.id, kind: "HTTP_REQUEST" as const, approvalMode: "AUTO" as const, isActive: true, allowedDomains: [appHost] };
+    if (existing) await db.tool.update({ where: { id: existing.id }, data });
+    else await db.tool.create({ data });
+  }
+  console.log(`tools: ${tools.map((t) => t.name).join(", ")} -> ${appUrl}/api/mock`);
 
   // The published bot only sees sources listed here; a seeded bot has no
   // BotVersion row, so agenticChat falls back to this column.

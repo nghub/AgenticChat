@@ -159,6 +159,37 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## Order scenario with tools (2026-09-09)
+
+First action flow: a customer with a faulty or unwanted toothbrush. SAM asks
+for the order number, looks the order up, and either accepts the return
+("Good news, it's still within the 30-day window", RMA number, instructions)
+or declines it warmly (days since delivery vs the window, human-review offer).
+Verified end to end for ORD-1001 (12 days, accepted) and ORD-1002 (47 days,
+declined), with tool executions in the `ToolExecution` log.
+
+What it took:
+- **Gemini function calling** in `lib/ai/provider.ts`. `chatAgent` was a
+  plain-chat stub for Gemini, so a Gemini bot could never use its tools.
+  Now maps `functionDeclarations` / `functionCall` / `functionResponse`,
+  mints call ids (Gemini returns none) and echoes Gemini 3's
+  `thoughtSignature` back with each call.
+- **Mock order system** at `app/api/mock` (`lib/mock/orders.ts`): three
+  orders with delivery dates relative to now - ORD-1001 toothbrush 12 days,
+  ORD-1002 toothbrush 47 days, ORD-1003 handpiece 20 days (inside the general
+  30 but outside its SKU's 14). `POST /api/mock/returns` makes the
+  accept/decline decision from the SKU's window - the model relays it, per
+  the guardrails doc's "enforce in code".
+- **Tools** seeded on the bot: `get_order` (READ_ONLY) and
+  `create_return_request` (WRITE, AUTO for the POC), pointing at the app's
+  own URL. `ALLOW_PRIVATE_TOOL_HOSTS=1` (development only) lets the tool
+  runner's SSRF guard reach localhost; `/api/mock` is public in `proxy.ts`.
+- **DEN-051 Soft-Bristle Adult Toothbrush** as a manual catalogue addendum.
+- **Fillers**: the prompt allows one "Okay, umm, let me see... found it."
+  only in the turn that reports a lookup; and on the voice side the hook
+  speaks "Umm, let me check that for you." if the answer takes longer than
+  1.2s, so the wait is never silent.
+
 ## Retrieval root cause found in use (2026-09-09): structure-blind chunking
 
 Symptom reported by the user: "it doesn't take information from the knowledge

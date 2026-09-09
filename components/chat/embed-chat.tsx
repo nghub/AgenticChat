@@ -191,6 +191,7 @@ export default function EmbedChat({
     setLoading(true);
     // Typing while the avatar talks is a barge-in: stop her so the new answer is not queued.
     if (avatar.mode === "VIDEO") void avatar.interrupt();
+    const cancelFiller = avatar.mode === "VIDEO" ? avatar.startWaitingFiller() : () => undefined;
 
     try {
       const res = await fetch("/api/public/chat", {
@@ -199,6 +200,7 @@ export default function EmbedChat({
         body: JSON.stringify({ publicKey, message: userText, sessionId, origin, locale: language }),
       });
       const data = await res.json();
+      cancelFiller();
       if (!res.ok) throw new Error(data.error || "Failed");
       if (data.sessionId) setSessionId(data.sessionId);
       const responseMessages = typeof data.locale === "string" ? getMessages(data.locale) : t;
@@ -219,6 +221,7 @@ export default function EmbedChat({
       // Same answer, same messageId, same refusal state - the avatar only adds a voice.
       if (avatar.mode === "VIDEO" && typeof data.answer === "string") void avatar.speak(data.answer);
     } catch (err) {
+      cancelFiller();
       setMessages((prev) => [
         ...prev,
         {

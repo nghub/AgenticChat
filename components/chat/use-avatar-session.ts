@@ -51,6 +51,17 @@ interface UseAvatarSessionArgs {
   greeting?: string;
 }
 
+/**
+ * What a person says while looking something up. Spoken only if the answer
+ * has not arrived within FILLER_AFTER_MS, so quick answers stay crisp.
+ */
+const WAIT_FILLERS = [
+  "Umm, let me check that for you.",
+  "Aaa, one moment, I'm looking that up.",
+  "Okay, let me have a look, one second.",
+];
+const FILLER_AFTER_MS = 1200;
+
 function modeFor(status: AvatarStatus): AvatarMode {
   switch (status) {
     case "connecting":
@@ -119,6 +130,20 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       body: JSON.stringify({ publicKey: a.publicKey, type, sessionId: a.getSessionId(), origin: a.origin, metadata }),
       keepalive: true,
     }).catch(() => undefined); // analytics must never affect the session
+  }, []);
+
+  /**
+   * Start a "let me check" filler that fires only if the answer takes longer
+   * than a beat. Returns a cancel function; call it when the answer arrives.
+   */
+  const startWaitingFiller = useCallback((): (() => void) => {
+    const provider = providerRef.current;
+    if (!provider) return () => undefined;
+    const filler = WAIT_FILLERS[Math.floor(Math.random() * WAIT_FILLERS.length)];
+    const timer = setTimeout(() => {
+      if (providerRef.current === provider) void provider.speak(filler).catch(() => undefined);
+    }, FILLER_AFTER_MS);
+    return () => clearTimeout(timer);
   }, []);
 
   const stop = useCallback(async (reason: StopReason = "user") => {
@@ -216,6 +241,7 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
         provider.onTranscript(async (transcript) => {
           const live = argsRef.current;
           live.appendUserMessage(transcript, "voice");
+          const cancelFiller = startWaitingFiller();
           try {
             const chatRes = await fetch("/api/public/chat", {
               method: "POST",
@@ -230,6 +256,7 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
               }),
             });
             const data = await chatRes.json();
+            cancelFiller();
             if (data.sessionId) live.setSessionId(data.sessionId);
 
             // ---- swap this block for speakStream() once /chat streams ----
@@ -240,6 +267,7 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
             }
             // --------------------------------------------------------------
           } catch (err) {
+            cancelFiller();
             console.error("voice turn failed:", err);
             // The text list already shows nothing; silence on the voice side
             // reads as a hang, so say so. Text chat is unaffected either way.
@@ -294,7 +322,7 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       setError(message);
       setStatus("error");
     }
-  }, [stop, track]);
+  }, [stop, track, startWaitingFiller]);
 
   /**
    * Milestone 2: the answer to a TYPED message is spoken too. The text list
@@ -353,5 +381,5 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
 
   const mode = useMemo(() => modeFor(status), [status]);
 
-  return { status, mode, error, start, stop, speak, interrupt, micMuted, toggleMic, sessionStartedAt, maxSessionSeconds };
+  return { status, mode, error, start, stop, speak, interrupt, startWaitingFiller, micMuted, toggleMic, sessionStartedAt, maxSessionSeconds };
 }
