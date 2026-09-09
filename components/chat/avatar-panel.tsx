@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot, Loader2, Mic, MicOff, PhoneOff, Volume2 } from "lucide-react";
+import { Bot, Loader2, Maximize2, Mic, MicOff, Minimize2, PhoneOff, Volume2 } from "lucide-react";
 import type { AvatarImages, AvatarStatus } from "@/lib/avatar";
 import type { AvatarMode } from "./use-avatar-session";
 
@@ -20,6 +20,15 @@ interface Props {
   onToggleMic: () => void;
   sessionStartedAt: number | null;
   maxSessionSeconds: number | null;
+  /**
+   * Picture-in-picture: the card fills its container as a small floating
+   * video (the host widget shrinks the panel) so the visitor can use the page
+   * while talking. Same <video> element, only restyled - the stream survives.
+   */
+  mini?: boolean;
+  /** Present only when a host page can shrink the panel (embedded via widget.js). */
+  onMinimize?: () => void;
+  onRestore?: () => void;
 }
 
 /**
@@ -49,6 +58,9 @@ export default function AvatarPanel({
   onToggleMic,
   sessionStartedAt,
   maxSessionSeconds,
+  mini = false,
+  onMinimize,
+  onRestore,
 }: Props) {
   const still = images?.landscapeImageUrl ?? images?.imageUrl ?? null;
   const thumb = images?.portraitImageUrl ?? images?.imageUrl ?? null;
@@ -114,8 +126,8 @@ export default function AvatarPanel({
           : { icon: <Mic className="h-3 w-3" aria-hidden />, label: "Mic on", cls: "bg-black/60" };
 
   return (
-    <div className="bg-gray-50 px-3 pt-3">
-      <div className="relative aspect-video max-h-56 w-full overflow-hidden rounded-xl bg-gray-950">
+    <div className={mini ? "h-full w-full bg-gray-950" : "bg-gray-50 px-3 pt-3"}>
+      <div className={mini ? "relative h-full w-full overflow-hidden bg-gray-950" : "relative aspect-video max-h-56 w-full overflow-hidden rounded-xl bg-gray-950"}>
         <video
           id={videoElementId}
           autoPlay
@@ -140,7 +152,7 @@ export default function AvatarPanel({
           </div>
         )}
 
-        {mode === "VIDEO" && (
+        {mode === "VIDEO" && !mini && (
           <>
             <div className="absolute start-2 top-2 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white backdrop-blur">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" aria-hidden />
@@ -163,16 +175,65 @@ export default function AvatarPanel({
               <span>{micPill.label}</span>
             </button>
 
+            <div className="absolute bottom-2 end-2 flex items-center gap-1.5">
+              {onMinimize && (
+                <button
+                  type="button"
+                  onClick={onMinimize}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80 transition-colors"
+                  aria-label="Minimize to a small window"
+                  title="Keep talking while you browse"
+                >
+                  <Minimize2 className="h-4 w-4" aria-hidden />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onEnd}
+                className="flex min-h-9 items-center gap-1.5 rounded-full bg-red-600 px-3.5 text-xs font-medium text-white shadow hover:bg-red-500 transition-colors"
+                aria-label="End voice session"
+              >
+                <PhoneOff className="h-3.5 w-3.5" aria-hidden />
+                End
+              </button>
+            </div>
+          </>
+        )}
+
+        {mode === "VIDEO" && mini && (
+          // Picture-in-picture control bar, the reference's mic / expand / End.
+          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/95 p-1 shadow-lg backdrop-blur">
+            <button
+              type="button"
+              onClick={onToggleMic}
+              aria-pressed={micMuted}
+              aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
+              className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${micMuted ? "bg-gray-200 text-gray-700" : status === "listening" ? "bg-emerald-100 text-emerald-700" : "text-gray-800 hover:bg-gray-100"}`}
+            >
+              {micMuted ? <MicOff className="h-4 w-4" aria-hidden /> : <Mic className={`h-4 w-4 ${status === "listening" ? "animate-pulse" : ""}`} aria-hidden />}
+            </button>
+            <button
+              type="button"
+              onClick={onRestore}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-gray-800 hover:bg-gray-100 transition-colors"
+              aria-label="Expand the chat"
+            >
+              <Maximize2 className="h-4 w-4" aria-hidden />
+            </button>
+            {sessionStartedAt && maxSessionSeconds && (
+              <span className="px-1 text-[11px] tabular-nums text-gray-500">
+                <Countdown key={sessionStartedAt} startedAt={sessionStartedAt} maxSeconds={maxSessionSeconds} />
+              </span>
+            )}
             <button
               type="button"
               onClick={onEnd}
-              className="absolute bottom-2 end-2 flex min-h-9 items-center gap-1.5 rounded-full bg-red-600 px-3.5 text-xs font-medium text-white shadow hover:bg-red-500 transition-colors"
+              className="flex min-h-9 items-center rounded-full px-3 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
               aria-label="End voice session"
             >
-              <PhoneOff className="h-3.5 w-3.5" aria-hidden />
               End
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -188,7 +249,7 @@ function Countdown({ startedAt, maxSeconds }: { startedAt: number; maxSeconds: n
   }, []);
   const remaining = Math.max(0, maxSeconds - Math.max(0, Math.floor((now - startedAt) / 1000)));
   return (
-    <span className="tabular-nums text-white/70" aria-label="Time remaining">
+    <span className="tabular-nums opacity-80" aria-label="Time remaining">
       {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
     </span>
   );

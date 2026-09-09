@@ -66,6 +66,15 @@ export default function EmbedChat({
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [hideSuggestions, setHideSuggestions] = useState(false);
+  // Picture-in-picture while a voice session is live. Only meaningful when a
+  // host page (widget.js) can shrink the panel around us; direct /embed use
+  // has no page to reveal. The layout is derived so it can never be "mini"
+  // without a live session, and the host is told on every change.
+  const [embedded, setEmbedded] = useState(false);
+  const [wantMini, setWantMini] = useState(false);
+  useEffect(() => {
+    setEmbedded(window.parent !== window);
+  }, []);
   // Starter questions are for a visitor who has not engaged yet. The first
   // keystroke, a picked question, a sent message or a voice session hides
   // them for good - they never come back mid-conversation.
@@ -97,6 +106,7 @@ export default function EmbedChat({
   const AVATAR_VIDEO_ID = "sam-avatar";
   const startVoice = () => {
     setEngaged(true);
+    setWantMini(false);
     void avatar.start();
   };
   const avatar = useAvatarSession({
@@ -128,6 +138,26 @@ export default function EmbedChat({
     appendAssistantMessage: (text) =>
       setMessages((prev) => [...prev, { id: Date.now().toString() + "_bot", role: "assistant", content: text }]),
   });
+  const mini = embedded && wantMini && avatar.mode === "VIDEO";
+  useEffect(() => {
+    if (!embedded) return;
+    try {
+      window.parent.postMessage({ type: "obc:layout", layout: mini ? "mini" : "panel" }, "*");
+    } catch {
+      // A restricted parent just keeps the panel as it is.
+    }
+  }, [embedded, mini]);
+  // The host closes the panel while a session is live: end it rather than
+  // keep streaming (and billing) invisibly.
+  useEffect(() => {
+    if (!embedded) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; open?: boolean } | null;
+      if (data?.type === "obc:panel" && data.open === false) void avatar.stop("user");
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [embedded, avatar]);
 
   const switchLanguage = async (next: string) => {
     setLanguage(next);
@@ -320,7 +350,7 @@ export default function EmbedChat({
   return (
     <div className="flex flex-col h-full" dir={isRtl ? "rtl" : "ltr"} lang={language}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b bg-gray-900 text-white">
+      <div className={`flex items-center gap-3 px-4 py-3 border-b bg-gray-900 text-white ${mini ? "hidden" : ""}`}>
         <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center">
           <Bot className="w-4 h-4" />
         </div>
@@ -352,7 +382,7 @@ export default function EmbedChat({
           </div>
         )}
       </div>
-      {supportedLocales.length > 1 && (
+      {supportedLocales.length > 1 && !mini && (
         <p className="border-b bg-gray-50 px-4 py-1.5 text-center text-[11px] text-gray-500">
           {t.availableInLanguages.replace("{languages}", describeLanguages(supportedLocales))}
         </p>
@@ -374,6 +404,9 @@ export default function EmbedChat({
           onToggleMic={avatar.toggleMic}
           sessionStartedAt={avatar.sessionStartedAt}
           maxSessionSeconds={avatar.maxSessionSeconds}
+          mini={mini}
+          onMinimize={embedded ? () => setWantMini(true) : undefined}
+          onRestore={embedded ? () => setWantMini(false) : undefined}
         />
       )}
       {avatar.error && avatar.mode === "TEXT" && (
@@ -383,7 +416,7 @@ export default function EmbedChat({
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className={`flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 ${mini ? "hidden" : ""}`}>
         {messages.map((msg) => (
           msg.role === "user" ? (
             <div key={msg.id} className="flex justify-end">
@@ -523,8 +556,8 @@ export default function EmbedChat({
       </div>
 
       {/* Suggested questions strip — transparent, blends with chat background */}
-      {!online && <div className="flex items-center justify-center gap-2 border-t bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status"><WifiOff className="h-3.5 w-3.5" /> {t.offlineBanner}</div>}
-      {!hideSuggestions && !engaged && questions.length > 0 && (
+      {!online && !mini && <div className="flex items-center justify-center gap-2 border-t bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status"><WifiOff className="h-3.5 w-3.5" /> {t.offlineBanner}</div>}
+      {!hideSuggestions && !engaged && !mini && questions.length > 0 && (
         <div className="relative bg-gray-50 px-3 pt-2 pb-1 max-h-[40%] overflow-y-auto">
           <button
             type="button"
@@ -543,7 +576,7 @@ export default function EmbedChat({
       )}
 
       {/* Input */}
-      <div className="p-3 bg-white border-t">
+      <div className={`p-3 bg-white border-t ${mini ? "hidden" : ""}`}>
         <form
           className="flex gap-2"
           onSubmit={(e) => { e.preventDefault(); sendMessage(); }}

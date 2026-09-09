@@ -61,6 +61,24 @@
       flex-direction: column;
     }
     #obc-panel.obc-open { transform: translateX(0); }
+    /* Picture-in-picture while the avatar is live: the panel becomes a small
+       floating video in the corner so the page stays usable. The iframe is
+       untouched, so the stream inside it survives. */
+    #obc-panel.obc-open.obc-mini {
+      top: auto;
+      ${vertical}: 24px;
+      ${horizontal}: 24px;
+      height: 200px;
+      width: 320px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+      transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.25s, height 0.25s, border-radius 0.25s;
+    }
+    #obc-panel.obc-mini #obc-panel-close { display: none; }
+    @media (max-width: 480px) {
+      #obc-panel.obc-open.obc-mini { width: 60vw; height: calc(60vw * 0.6); ${horizontal}: 12px; ${vertical}: 12px; }
+    }
     #obc-panel-close {
       position: absolute;
       top: 8px;
@@ -138,10 +156,20 @@
       });
     } catch { /* analytics must never affect chat availability */ }
   }
+  var isMini = false;
+  function applyPanelClass() {
+    panel.className = (isOpen ? "obc-open" : "") + (isOpen && isMini ? " obc-mini" : "");
+  }
   function setOpen(next) {
     isOpen = next;
     if (isOpen) ensureIframe();
-    panel.className = isOpen ? "obc-open" : "";
+    if (!isOpen) isMini = false;
+    applyPanelClass();
+    // Tell the embed when it is hidden so a live voice session ends instead
+    // of streaming (and billing) invisibly.
+    if (!isOpen && iframe && iframe.contentWindow) {
+      try { iframe.contentWindow.postMessage({ type: "obc:panel", open: false }, baseUrl); } catch { /* ignore */ }
+    }
     launcher.className = isOpen ? "obc-hidden" : "";
     launcher.setAttribute("aria-expanded", String(isOpen));
     if (isOpen) {
@@ -155,12 +183,19 @@
   closeBtn.addEventListener("click", function () { setOpen(false); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && isOpen) setOpen(false); });
 
-  // The embed page announces its bot name once loaded; the pill picks it up
-  // unless a fixed label was configured. Only the name crosses the boundary.
+  // Messages from the embed (origin-checked). "obc:ready" carries the bot
+  // name for the pill; "obc:layout" asks for picture-in-picture or the full
+  // panel while a voice session is live.
   window.addEventListener("message", function (event) {
     if (event.origin !== baseUrl) return;
     var data = event.data;
-    if (!data || data.type !== "obc:ready" || launcherLabel) return;
+    if (!data) return;
+    if (data.type === "obc:layout") {
+      isMini = data.layout === "mini";
+      applyPanelClass();
+      return;
+    }
+    if (data.type !== "obc:ready" || launcherLabel) return;
     if (typeof data.botName === "string" && data.botName.trim()) {
       labelEl.textContent = "Ask " + data.botName.trim();
       launcher.setAttribute("aria-label", "Open chat with " + data.botName.trim());

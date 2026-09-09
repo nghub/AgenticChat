@@ -159,6 +159,23 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## Picture-in-picture while talking (2026-09-09)
+
+During a live session the card has a minimize button. The embed derives
+`mini` (only ever true while a session is live and the page is embedded via
+widget.js) and tells the host with `postMessage({type:"obc:layout",
+layout:"mini"|"panel"})`; the host shrinks the side panel to a 320×200
+floating window in the corner (`#obc-panel.obc-mini`), so the visitor can use
+the page while talking. Inside, the chat chrome is hidden with CSS and the
+card fills the frame with the reference's control bar: mic, expand, countdown,
+End. It is the **same `<video>` element restyled** - never remounted, because
+the WebRTC stream is attached to that node (verified: same node before and
+after). Expand restores the panel; End or the session cap restore it too, as
+`mini` cannot exist without a live session. Closing the panel (×) during a
+session sends `obc:panel {open:false}` and the embed ends the session rather
+than stream and bill invisibly. Direct `/embed` use shows no minimize button:
+there is no page to reveal.
+
 ## Mid-conversation switch to voice (2026-09-09)
 
 When the visitor has been typing and then starts a voice session, the avatar
