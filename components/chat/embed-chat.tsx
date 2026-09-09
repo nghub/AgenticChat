@@ -1,13 +1,13 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Send, Bot, User, UserPlus, CheckCircle2, X, ThumbsUp, ThumbsDown, BookOpen, WifiOff, Globe, Mic } from "lucide-react";
+import { Send, Bot, UserPlus, CheckCircle2, X, ThumbsUp, ThumbsDown, BookOpen, WifiOff, Globe, Mic } from "lucide-react";
 import SuggestedBubbles from "./suggested-bubbles";
 import { getMessages } from "@/lib/i18n/messages";
 import { getLanguage, normalizeLanguage, describeLanguages } from "@/lib/i18n/languages";
 import { MarkdownMessage } from "./markdown-message";
 import { useAvatarSession } from "./use-avatar-session";
 import AvatarPanel from "./avatar-panel";
-import SpeakWithPiperButton from "./speak-with-piper-button";
+import type { AvatarImages } from "@/lib/avatar";
 
 interface Message {
   id: string;
@@ -31,8 +31,10 @@ interface Props {
   initialOrigin?: string;
   defaultLocale?: string;
   supportedLocales?: string[];
-  /** Server decides this from env; the button never renders when the avatar is unconfigured. */
+  /** Server decides this from env; the avatar card never renders when unconfigured. */
   avatarEnabled?: boolean;
+  /** Static stills for the idle card, looked up server-side. */
+  avatarImages?: AvatarImages | null;
 }
 
 interface LeadFormState {
@@ -55,6 +57,7 @@ export default function EmbedChat({
   defaultLocale = "en",
   supportedLocales = ["en"],
   avatarEnabled = false,
+  avatarImages = null,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     { id: "welcome", role: "assistant", content: welcomeMessage },
@@ -314,13 +317,20 @@ export default function EmbedChat({
         </p>
       )}
 
-      {/* Avatar - only exists while a voice session is in flight */}
-      {avatar.mode !== "TEXT" && (
+      {/* Avatar card: face first, collapses to a pill once the visitor has spoken or typed */}
+      {avatarEnabled && (
         <AvatarPanel
           videoElementId={AVATAR_VIDEO_ID}
           mode={avatar.mode}
+          status={avatar.status}
           botName={botName}
+          images={avatarImages}
+          compact={hasUserMessage}
+          disabled={!online}
+          onStart={() => void avatar.start()}
           onEnd={() => void avatar.stop()}
+          micMuted={avatar.micMuted}
+          onToggleMic={avatar.toggleMic}
           sessionStartedAt={avatar.sessionStartedAt}
           maxSessionSeconds={avatar.maxSessionSeconds}
         />
@@ -334,31 +344,22 @@ export default function EmbedChat({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-              msg.role === "user" ? "bg-gray-900" : "bg-white border border-gray-200"
-            }`}>
-              {msg.role === "user"
-                ? <User className="w-3.5 h-3.5 text-white" />
-                : <Bot className="w-3.5 h-3.5 text-gray-600" />}
+          msg.role === "user" ? (
+            <div key={msg.id} className="flex justify-end">
+              <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-gray-200 px-3.5 py-2 text-sm text-gray-900">
+                <p className="whitespace-pre-wrap break-words leading-6">{msg.source === "voice" && <Mic className="me-1 inline h-3 w-3 opacity-70" aria-label="Spoken" />}{msg.content}</p>
+              </div>
             </div>
-            <div className="min-w-0 max-w-[85%]">
-            <div className={`overflow-hidden rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
-              msg.role === "user"
-                ? "bg-gray-900 text-white rounded-tr-sm"
-                : "bg-white text-gray-900 rounded-tl-sm border border-gray-100"
-            }`}>
-              {msg.role === "assistant"
-                ? <MarkdownMessage content={msg.content} />
-                : <p className="whitespace-pre-wrap break-words leading-6">{msg.source === "voice" && <Mic className="me-1 inline h-3 w-3 opacity-70" aria-label="Spoken" />}{msg.content}</p>}
+          ) : (
+            <div key={msg.id} className="min-w-0 max-w-[92%] text-sm text-gray-900">
+              <MarkdownMessage content={msg.content} />
+              {msg.citations && msg.citations.length > 0 && <details className="mt-1.5 rounded-md border bg-white px-3 py-2 text-xs"><summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-600"><BookOpen className="h-3 w-3" /> {t.sources} ({msg.citations.length})</summary><div className="mt-2 space-y-2">{msg.citations.map((citation, index) => <div key={`${citation.title}-${index}`} className="border-t pt-2 first:border-0 first:pt-0"><p className="font-medium text-gray-700">{citation.url ? <a href={citation.url} target="_blank" rel="noopener noreferrer" className="underline">{citation.title}</a> : citation.title}</p><p className="mt-0.5 text-gray-500">{citation.excerpt}</p><p className="mt-1 text-[10px] text-gray-400">{t.updated} {new Date(citation.updatedAt).toLocaleDateString()}</p></div>)}</div></details>}
+              {msg.messageId && <div className="mt-1 flex items-center gap-1"><span className="me-1 text-[10px] text-gray-400">{t.helpfulPrompt}</span><button type="button" onClick={() => submitFeedback(msg.messageId!, "POSITIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "POSITIVE" ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markHelpful}><ThumbsUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => submitFeedback(msg.messageId!, "NEGATIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "NEGATIVE" ? "bg-orange-100 text-orange-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markNotHelpful}><ThumbsDown className="h-3.5 w-3.5" /></button></div>}
             </div>
-            {msg.role === "assistant" && msg.citations && msg.citations.length > 0 && <details className="mt-1.5 rounded-md border bg-white px-3 py-2 text-xs"><summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-600"><BookOpen className="h-3 w-3" /> {t.sources} ({msg.citations.length})</summary><div className="mt-2 space-y-2">{msg.citations.map((citation, index) => <div key={`${citation.title}-${index}`} className="border-t pt-2 first:border-0 first:pt-0"><p className="font-medium text-gray-700">{citation.url ? <a href={citation.url} target="_blank" rel="noopener noreferrer" className="underline">{citation.title}</a> : citation.title}</p><p className="mt-0.5 text-gray-500">{citation.excerpt}</p><p className="mt-1 text-[10px] text-gray-400">{t.updated} {new Date(citation.updatedAt).toLocaleDateString()}</p></div>)}</div></details>}
-            {msg.role === "assistant" && msg.messageId && <div className="mt-1 flex items-center gap-1"><span className="me-1 text-[10px] text-gray-400">{t.helpfulPrompt}</span><button type="button" onClick={() => submitFeedback(msg.messageId!, "POSITIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "POSITIVE" ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markHelpful}><ThumbsUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => submitFeedback(msg.messageId!, "NEGATIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "NEGATIVE" ? "bg-orange-100 text-orange-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markNotHelpful}><ThumbsDown className="h-3.5 w-3.5" /></button></div>}
-            </div>
-          </div>
+          )
         ))}
         {showRefusalActions && (
-          <div className="flex flex-wrap gap-2 ps-9">
+          <div className="flex flex-wrap gap-2">
             {refusalActions.map((action) => (
               <button
                 key={action.label}
@@ -467,11 +468,8 @@ export default function EmbedChat({
           </div>
         )}
         {loading && (
-          <div className="flex gap-2">
-            <div className="w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center">
-              <Bot className="w-3.5 h-3.5 text-gray-600" />
-            </div>
-            <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+          <div className="flex gap-2" role="status" aria-label="Thinking">
+            <div className="px-1 py-2">
               <div className="flex gap-1">
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -505,26 +503,33 @@ export default function EmbedChat({
 
       {/* Input */}
       <div className="p-3 bg-white border-t">
-        {avatarEnabled && avatar.mode === "TEXT" && (
-          <SpeakWithPiperButton
-            botName={botName}
-            onClick={() => void avatar.start()}
-            disabled={!online || loading}
-          />
-        )}
         <form
           className="flex gap-2"
           onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
           /* sendMessage takes optional text param; submit form uses input state */
         >
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={t.typeMessage}
-            disabled={loading || !online}
-            className="flex-1 min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          />
+          <div className="relative flex-1 min-w-0">
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t.typeMessage}
+              disabled={loading || !online}
+              className={`w-full min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${avatarEnabled && avatar.mode === "TEXT" ? "pe-11" : ""}`}
+            />
+            {/* Second way in: the mic in the field starts the same voice session. Hidden once a session owns the mic. */}
+            {avatarEnabled && avatar.mode === "TEXT" && (
+              <button
+                type="button"
+                onClick={() => void avatar.start()}
+                disabled={!online}
+                className="absolute end-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40"
+                aria-label={`Speak with ${botName}`}
+              >
+                <Mic className="h-4 w-4" aria-hidden />
+              </button>
+            )}
+          </div>
           <button
             type="submit"
             disabled={loading || !online || !input.trim()}
@@ -535,7 +540,7 @@ export default function EmbedChat({
           </button>
         </form>
         <p className="text-center text-xs text-gray-400 mt-2">
-          {privacyNotice} {t.poweredBy} <a href="https://github.com/Hemang-ai/OpenChat" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">OpenBusinessChat</a>
+          {privacyNotice}{avatarEnabled && " Voice sessions are processed by our avatar provider and may be recorded."} {t.poweredBy} <a href="https://github.com/Hemang-ai/OpenChat" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">OpenBusinessChat</a>
         </p>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import EmbedChat from "@/components/chat/embed-chat";
 import { getSuggestedQuestions } from "@/lib/rag/suggested-questions";
 import { resolvePublicBotKey } from "@/lib/bots/public-key";
+import { getAnamAvatarImages } from "@/lib/avatar/anam-avatar";
 
 export async function generateMetadata({
   params,
@@ -51,6 +52,10 @@ export default async function EmbedPage({
     }
   }
 
+  // The avatar is optional and server-configured; the browser never sees the key.
+  const avatarEnabled = Boolean(process.env.ANAM_API_KEY && process.env.ANAM_AVATAR_ID && process.env.ANAM_VOICE_ID);
+  const avatarImages = avatarEnabled ? await getAnamAvatarImages() : null;
+
   return (
     <div className="h-screen bg-white">
       <EmbedChat
@@ -64,7 +69,8 @@ export default async function EmbedPage({
         initialOrigin={origin}
         defaultLocale={bot.defaultLocale}
         supportedLocales={bot.supportedLocales}
-        avatarEnabled={Boolean(process.env.ANAM_API_KEY && process.env.ANAM_AVATAR_ID && process.env.ANAM_VOICE_ID)}
+        avatarEnabled={avatarEnabled}
+        avatarImages={avatarImages}
       />
     </div>
   );

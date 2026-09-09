@@ -69,9 +69,18 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
   const [error, setError] = useState<string | null>(null);
   const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
   const [maxSessionSeconds, setMaxSessionSeconds] = useState<number | null>(null);
+  const [micMuted, setMicMuted] = useState(false);
   const providerRef = useRef<AvatarProvider | null>(null);
   const unsubsRef = useRef<Array<() => void>>([]);
   const stoppingRef = useRef(false);
+  const micMutedRef = useRef(false);
+  const connectedFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // First frame painted (or fallback elapsed). Until then the card shows
+  // "Connecting" and every vendor status is held back, because the greeting
+  // starts before frames arrive and would otherwise flip the card onto a black
+  // rectangle. The last held status is applied once the frame lands.
+  const videoReadyRef = useRef(false);
+  const pendingStatusRef = useRef<AvatarStatus | null>(null);
 
   // Always read the freshest args (sessionId, locale, origin) at event time
   // rather than whatever render start() happened to be called from. This is
@@ -84,6 +93,10 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
   const stop = useCallback(async () => {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
+    if (connectedFallbackRef.current) clearTimeout(connectedFallbackRef.current);
+    connectedFallbackRef.current = null;
+    videoReadyRef.current = false;
+    pendingStatusRef.current = null;
     setStatus("closed");
     unsubsRef.current.forEach((u) => u());
     unsubsRef.current = [];
@@ -91,6 +104,8 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       await providerRef.current?.disconnect();
     } finally {
       providerRef.current = null;
+      micMutedRef.current = false;
+      setMicMuted(false);
       setSessionStartedAt(null);
       setStatus("idle"); // back to text mode - conversation state is untouched
       stoppingRef.current = false;
@@ -133,6 +148,17 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
             void stop();
             return;
           }
+          if (next === "error") {
+            setStatus(next);
+            return;
+          }
+          if (!videoReadyRef.current) {
+            // Vendor "connected" here means the connection, not a frame - the
+            // element's own frame callback below decides when to show video.
+            pendingStatusRef.current = next;
+            return;
+          }
+          if (next === "connecting") return; // stale after the first frame
           setStatus(next);
         })
       );
@@ -173,8 +199,28 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
 
       await waitForElement(a.videoElementId);
       await provider.connect(a.videoElementId);
+      // Billing starts here, so the countdown does too.
       setSessionStartedAt(Date.now());
-      setStatus("connected");
+
+      // Show the video only once a frame has actually been painted. The
+      // element is the source of truth, not the vendor's connection event:
+      // frames have arrived 5-20s after connect in testing. If nothing paints
+      // in 15s, show the stream anyway rather than hang on "Connecting".
+      const markVideoReady = () => {
+        if (videoReadyRef.current) return;
+        videoReadyRef.current = true;
+        if (connectedFallbackRef.current) clearTimeout(connectedFallbackRef.current);
+        connectedFallbackRef.current = null;
+        const held = pendingStatusRef.current;
+        pendingStatusRef.current = null;
+        setStatus(held === "speaking" || held === "listening" ? held : "connected");
+      };
+      const videoEl = document.getElementById(a.videoElementId) as
+        | (HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number })
+        | null;
+      if (videoEl?.requestVideoFrameCallback) videoEl.requestVideoFrameCallback(markVideoReady);
+      else videoEl?.addEventListener("loadeddata", markVideoReady, { once: true });
+      connectedFallbackRef.current = setTimeout(markVideoReady, 15000);
 
       if (a.greeting) await provider.speak(a.greeting);
     } catch (err) {
@@ -201,6 +247,19 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
     }
   }, []);
 
+  /** Mute/unmute the visitor's mic mid-session. The session and the video stay up. */
+  const toggleMic = useCallback(() => {
+    const provider = providerRef.current;
+    if (!provider) return;
+    try {
+      const actual = provider.setMicMuted(!micMutedRef.current);
+      micMutedRef.current = actual;
+      setMicMuted(actual);
+    } catch (err) {
+      console.error("avatar mic toggle failed:", err);
+    }
+  }, []);
+
   // Widget closed mid-call: release the mic and the billed session.
   useEffect(() => {
     return () => {
@@ -210,5 +269,5 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
 
   const mode = useMemo(() => modeFor(status), [status]);
 
-  return { status, mode, error, start, stop, speak, sessionStartedAt, maxSessionSeconds };
+  return { status, mode, error, start, stop, speak, micMuted, toggleMic, sessionStartedAt, maxSessionSeconds };
 }

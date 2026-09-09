@@ -11,7 +11,7 @@
  * extend the switch in createAvatarProvider. Nothing else changes.
  */
 
-export type { AvatarProvider, AvatarStatus, Unsubscribe } from "./types";
+export type { AvatarProvider, AvatarStatus, AvatarImages, Unsubscribe } from "./types";
 
 export type AvatarVendor = "anam" /* | "tavus" | "simli" */;
 

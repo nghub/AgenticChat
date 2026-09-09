@@ -15,13 +15,16 @@
  *   - AnamEvent.CONNECTION_ESTABLISHED  -> ()                      confirmed
  *   - AnamEvent.CONNECTION_CLOSED       -> (reason, details?)      confirmed
  *   - AnamEvent.VIDEO_PLAY_STARTED      -> ()                      confirmed
+ *   - AnamEvent.USER_SPEECH_STARTED/ENDED -> (correlationId)        confirmed (vendor VAD)
+ *   - AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED -> (MessageStreamEvent{role,endOfSpeech,interrupted}) confirmed
+ *   - client.muteInputAudio() / unmuteInputAudio() -> InputAudioState confirmed
  *   - MessageRole.USER === "user", MessageRole.PERSONA === "persona"
  *
  * All vendor-specific code stays in this file; the UI only sees AvatarProvider.
  */
 
 import { createClient, AnamEvent, MessageRole } from "@anam-ai/js-sdk";
-import type { AnamClient, Message } from "@anam-ai/js-sdk";
+import type { AnamClient, Message, MessageStreamEvent } from "@anam-ai/js-sdk";
 import type { AvatarProvider, AvatarStatus, Unsubscribe } from "../types";
 
 export class AnamProvider implements AvatarProvider {
@@ -88,6 +91,11 @@ export class AnamProvider implements AvatarProvider {
     }
   }
 
+  setMicMuted(muted: boolean): boolean {
+    const state = muted ? this.client.muteInputAudio() : this.client.unmuteInputAudio();
+    return state.isMuted;
+  }
+
   onTranscript(handler: (text: string) => void): Unsubscribe {
     // Anam finalizes the visitor's spoken turn via the message-history event,
     // which delivers the full history array on each update.
@@ -103,19 +111,38 @@ export class AnamProvider implements AvatarProvider {
   }
 
   onStatus(handler: (status: AvatarStatus) => void): Unsubscribe {
-    // Map the SDK's connection lifecycle onto our status enum.
+    // Map the SDK's connection lifecycle and turn-taking onto our status enum.
+    // Both of these fire before a frame is painted, so they are reported as
+    // "connected" in the connection sense only; the hook decides when to show
+    // video from the <video> element's own frame callback.
     const onEstablished = () => handler("connected");
     const onVideoPlaying = () => handler("connected");
     const onClosed = () => handler("closed");
+    // Vendor-side voice activity detection: who is talking right now.
+    const onUserSpeechStarted = () => handler("listening");
+    const onUserSpeechEnded = () => handler("connected");
+    const onInterrupted = () => handler("connected");
+    const onStreamEvent = (event: MessageStreamEvent) => {
+      if (event.role !== MessageRole.PERSONA) return;
+      handler(event.endOfSpeech || event.interrupted ? "connected" : "speaking");
+    };
 
     this.client.addListener(AnamEvent.CONNECTION_ESTABLISHED, onEstablished);
     this.client.addListener(AnamEvent.VIDEO_PLAY_STARTED, onVideoPlaying);
     this.client.addListener(AnamEvent.CONNECTION_CLOSED, onClosed);
+    this.client.addListener(AnamEvent.USER_SPEECH_STARTED, onUserSpeechStarted);
+    this.client.addListener(AnamEvent.USER_SPEECH_ENDED, onUserSpeechEnded);
+    this.client.addListener(AnamEvent.TALK_STREAM_INTERRUPTED, onInterrupted);
+    this.client.addListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, onStreamEvent);
 
     return () => {
       this.client.removeListener(AnamEvent.CONNECTION_ESTABLISHED, onEstablished);
       this.client.removeListener(AnamEvent.VIDEO_PLAY_STARTED, onVideoPlaying);
       this.client.removeListener(AnamEvent.CONNECTION_CLOSED, onClosed);
+      this.client.removeListener(AnamEvent.USER_SPEECH_STARTED, onUserSpeechStarted);
+      this.client.removeListener(AnamEvent.USER_SPEECH_ENDED, onUserSpeechEnded);
+      this.client.removeListener(AnamEvent.TALK_STREAM_INTERRUPTED, onInterrupted);
+      this.client.removeListener(AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED, onStreamEvent);
     };
   }
 }

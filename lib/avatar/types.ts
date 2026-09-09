@@ -10,11 +10,18 @@
 export type AvatarStatus =
   | "idle"
   | "connecting"
-  | "connected"
-  | "speaking"
-  | "listening"
+  | "connected"   // stream up, nobody talking
+  | "speaking"    // the avatar is talking
+  | "listening"   // the visitor is talking (vendor VAD)
   | "error"
   | "closed";
+
+/** Static stills of the avatar for the idle card; all public CDN URLs. */
+export interface AvatarImages {
+  landscapeImageUrl: string | null;
+  portraitImageUrl: string | null;
+  imageUrl: string | null;
+}
 
 export type Unsubscribe = () => void;
 
@@ -39,6 +46,13 @@ export interface AvatarProvider {
 
   /** Immediately stop the current utterance (barge-in). */
   interrupt(): Promise<void>;
+
+  /**
+   * Mute or unmute the visitor's microphone without ending the session.
+   * Returns the vendor's actual state afterwards, so the UI never claims a
+   * mute that did not take (e.g. no input track yet).
+   */
+  setMicMuted(muted: boolean): boolean;
 
   /**
    * Fires when the vendor finalizes the visitor's spoken turn. The string is

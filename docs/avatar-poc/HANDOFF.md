@@ -102,13 +102,29 @@ Endpoint, `createClient`, `streamToVideoElement`, `stopStreaming`,
 |---|---|---|---|
 | 1 | Avatar renders — **DONE 2026-09-09** | files above + `AvatarPanel`, `SpeakWithPiperButton`, state machine TEXT→CONNECTING→VIDEO→ENDING→TEXT; hard-coded greeting; End cleans up mic/session | 1 day |
 | 2 | Existing brain speaks — **DONE 2026-09-09** | typed message → `/api/public/chat` → `provider.speak(answer)`. Verified live with Gemini-only config; see *Latency* below | 1 day |
-| 3 | Speech in | transcript → `/api/public/chat` → speak. Add Prisma migration `Message.source` enum `TEXT/VOICE`; extend chat route zod with `source?` and persist it | 1 day |
+| 3 | Speech in — **round trip confirmed by a human 2026-09-09** (mic → transcript → agent → spoken answer). `Message.source` migration still to do | transcript → `/api/public/chat` → speak. Add Prisma migration `Message.source` enum `TEXT/VOICE`; extend chat route zod with `source?` and persist it | 1 day |
+| 3b | Avatar card UX (added) — **DONE 2026-09-09** | Face-first card modelled on Salesforce's "Piper": static portrait + overlaid CTA → compact pill once the visitor has spoken/typed → "Connecting you to …" → live video with who-is-talking mic pill (Listening / Speaking / Muted), mute toggle, countdown, End. Second entry point: mic icon in the input. Plain-text assistant messages, small gray visitor bubbles | 0.5 day |
 | 4 | Shared context test | "500 employees" test (text→video); revisit `take: 12` history cap if needed | 0.5 day |
 | 5 | Interruption + cleanup | barge-in stops talk stream; End releases everything | 1 day |
 | 6 | Video→text continuity, errors, analytics | events: avatar_cta_clicked, avatar_connected, avatar_first_response, avatar_interrupted, avatar_session_ended, avatar_session_failed; latency splits T0–T4 | 1–1.5 days |
 | — | **Streaming refactor (optional, "good path")** | SSE `/api/public/chat/stream`; stream only the final generation after tools resolve; swap `provider.speak` → `speakStream` | +2–4 days |
 
 Fast path total ≈ 5–7 days. Good path ≈ 7–10 days.
+
+## Avatar card states (milestone 3b)
+
+`components/chat/avatar-panel.tsx` renders one card at the top of the chat:
+
+| Card state | When | Shows |
+|---|---|---|
+| TEXT, expanded | no visitor message yet | static landscape still of the avatar (from `GET /v1/avatars/{id}`, public CDN, cached 24h server-side) with the "Speak with X" pill overlaid |
+| TEXT, compact | visitor has sent ≥1 message, no session | round portrait thumb + "Speak with X" pill; messages get the room |
+| CONNECTING | pill or input-mic clicked | black card, spinner, "Connecting you to X". Held until the SDK's `VIDEO_PLAY_STARTED` (frames took 5–20s in testing) with a 15s fallback; `speaking`/`listening` events are ignored until then so the greeting cannot flip the card onto a black frame |
+| VIDEO | first frame | live video, "● Live m:ss" countdown keyed to session start, mic pill: **Mic on** / **Listening…** (`USER_SPEECH_STARTED`) / **X is speaking** (`MESSAGE_STREAM_EVENT_RECEIVED`, persona role) / **Muted** (`muteInputAudio`, state read back from the SDK), End |
+| ENDING | End or cap | dim overlay, then back to TEXT (compact if there are messages) |
+| ERROR | any failure | back to TEXT + amber line; text chat unaffected |
+
+Only two things start a (billed) session: the pill on the card and the mic icon in the input. Nothing on mount.
 
 ## Latency (learned in milestone 2 — read before picking a model)
 
