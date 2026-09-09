@@ -44,11 +44,17 @@ interface UseAvatarSessionArgs {
   appendAssistantMessage: (text: string) => void;
   videoElementId: string;                        // id of the <video> in AvatarPanel
   /**
-   * Spoken as soon as the stream is up. Milestone 1 hard-codes this (the bot's
-   * welcome message); Anam's own greeting is disabled server-side so there is
-   * never a duplicate "Hi, how can I help?".
+   * Fallback greeting spoken as soon as the stream is up (the bot's welcome
+   * message). Anam's own greeting is disabled server-side so there is never a
+   * duplicate "Hi, how can I help?".
    */
   greeting?: string;
+  /**
+   * Context-aware greeting: called when a session starts, in parallel with
+   * the connection, so a visitor who switches from text mid-conversation is
+   * greeted with where they left off. Return null to use `greeting`.
+   */
+  getGreeting?: () => Promise<string | null>;
 }
 
 /**
@@ -199,6 +205,10 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       setMaxSessionSeconds(typeof cap === "number" ? cap : null);
       tRef.current.t1 = Date.now();
       stage = "connect";
+      // Ask the agent what to say first while the media connects - no extra wait.
+      const greetingPromise: Promise<string | null> = a.getGreeting
+        ? a.getGreeting().catch(() => null)
+        : Promise.resolve(null);
 
       // 2) Build the vendor-neutral provider and connect the video element.
       const provider = await createAvatarProvider("anam", sessionToken);
@@ -313,7 +323,8 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       connectedFallbackRef.current = setTimeout(markVideoReady, 15000);
 
       stage = "greeting";
-      if (a.greeting) await provider.speak(a.greeting);
+      const greeting = (await greetingPromise) || a.greeting;
+      if (greeting) await provider.speak(greeting);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Voice mode could not start.";
       console.error("avatar start failed:", err);

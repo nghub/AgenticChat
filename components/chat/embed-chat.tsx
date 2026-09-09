@@ -105,6 +105,22 @@ export default function EmbedChat({
     locale: language,
     videoElementId: AVATAR_VIDEO_ID,
     greeting: welcomeMessage,
+    // Mid-conversation switch to voice: the same agent says where we left
+    // off ("I see you want to return your toothbrush - what's your order
+    // number?") instead of the welcome script, and it lands in the transcript.
+    getGreeting: async () => {
+      if (!hasUserMessage || !sessionId) return null;
+      const res = await fetch("/api/public/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publicKey, intent: "voice_greeting", sessionId, origin, locale: language }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.contextual || typeof data.answer !== "string" || !data.answer) return null;
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "_greet", role: "assistant", content: data.answer, messageId: data.messageId }]);
+      return data.answer;
+    },
     getSessionId: () => sessionId,
     setSessionId,
     appendUserMessage: (text, source) =>

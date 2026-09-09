@@ -14,12 +14,18 @@ import { evaluateHandoff } from "@/lib/conversations/handoff";
 import { createHash } from "crypto";
 import { isProductionVersionApproved } from "@/lib/bots/production-policy";
 import { resolvePublicBotKey } from "@/lib/bots/public-key";
+import { voiceGreeting } from "@/lib/agents/voice-greeting";
 import { resolveResponseLanguage } from "@/lib/i18n/languages";
 import { getMessages } from "@/lib/i18n/messages";
 
 const chatSchema = z.object({
   publicKey: z.string().min(1),
-  message: z.string().min(1).max(2000),
+  // Optional only for intent requests; a normal turn must carry a message.
+  message: z.string().max(2000).optional(),
+  // "voice_greeting": the visitor just switched to voice - return what the
+  // assistant should say first, continuing the conversation, instead of
+  // answering a message.
+  intent: z.enum(["voice_greeting"]).optional(),
   sessionId: z.string().optional(),
   origin: z.string().url().max(500).optional(),
   locale: z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/).max(10).optional(),
@@ -33,7 +39,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { publicKey, message, sessionId, origin, locale, source = "TEXT" } = chatSchema.parse(body);
+    const { publicKey, message = "", sessionId, origin, locale, source = "TEXT", intent } = chatSchema.parse(body);
+    if (!intent && !message.trim()) {
+      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+    }
 
     const limitConfig = getPublicChatRateLimitConfig();
 
@@ -89,6 +98,25 @@ export async function POST(req: NextRequest) {
         where: { sessionId, botId: bot.id },
         include: { messages: { orderBy: { createdAt: "asc" }, take: 12 } },
       });
+    }
+
+    if (intent === "voice_greeting") {
+      const history = (conversation?.messages || []).map((m) => ({
+        role: m.role.toLowerCase() as "user" | "assistant",
+        content: m.content,
+      }));
+      // No conversation yet: the plain welcome is right, and nothing to persist.
+      if (!conversation || !history.some((h) => h.role === "user")) {
+        return NextResponse.json({ answer: bot.welcomeMessage, sessionId: conversation?.sessionId ?? null, contextual: false }, { headers: limitHeaders });
+      }
+      const answer = await voiceGreeting(bot, history, conversation.locale);
+      const saved = await db.message.create({
+        data: { conversationId: conversation.id, role: "ASSISTANT", content: answer, source: "VOICE" },
+      });
+      return NextResponse.json(
+        { answer, sessionId: conversation.sessionId, messageId: saved.id, contextual: true, isRefused: false, locale: conversation.locale, citations: [], handoff: null },
+        { headers: limitHeaders }
+      );
     }
 
     if (!conversation) {

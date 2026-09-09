@@ -246,7 +246,7 @@ ${context}`;
  * tone that relaxes the no-contractions rule; the others keep it because the
  * formal register reads better in translated and spoken answers.
  */
-function toneRules(tone: string | null | undefined): string {
+export function toneRules(tone: string | null | undefined): string {
   switch (tone) {
     case "friendly":
       return `- TONE: warm and conversational, like a helpful colleague. In this tone contractions are REQUIRED wherever natural: write "I'm SAM", "you're welcome", "we can't", "we'll" - never "I am SAM" or "you are welcome". "Plain business language" here means friendly and clear, not formal. Greet people back briefly and naturally; one light, human sentence is welcome, but no filler and no repeated pleasantries. Do not restate that you are an AI in every reply - say it when asked, when it matters, or at the start of a conversation.
