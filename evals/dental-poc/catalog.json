@@ -1,0 +1,28 @@
+{
+  "note": "Verified ground truth for the SKUs referenced by the eval cases. Values transcribed from the inventory + policy PDFs. This is the answer key: a factual answer is graded against these.",
+  "skus": {
+    "DEN-001": { "name": "Nitrile Exam Gloves - Small", "pack": "Box of 100", "price": "8.95", "returnWindowDays": 30, "hygiene": true },
+    "DEN-002": { "name": "Nitrile Exam Gloves - Medium", "pack": "Box of 100", "price": "8.95", "returnWindowDays": 30, "hygiene": true },
+    "DEN-004": { "name": "Level 3 Procedure Masks", "pack": "Box of 50", "price": "11.49", "returnWindowDays": 30, "hygiene": true },
+    "DEN-012": { "name": "Fluoride Varnish - Mint", "pack": "Box of 50 doses", "price": "49.95", "returnWindowDays": 30, "expiry": true },
+    "DEN-020": { "name": "Universal Composite - A2", "pack": "4 g syringe", "price": "34.95", "returnWindowDays": 30 },
+    "DEN-024": { "name": "Universal Bonding Agent", "pack": "5 mL bottle", "price": "54.95", "returnWindowDays": 30, "sealedOnly": true },
+    "DEN-043": { "name": "High-Speed Air Handpiece", "pack": "Each", "price": "399.00", "returnWindowDays": 14, "warrantyMonths": 12 },
+    "DEN-045": { "name": "LED Curing Light", "pack": "Each", "price": "329.00", "returnWindowDays": 14, "warrantyMonths": 12 },
+    "DEN-048": { "name": "Dental X-Ray Lead Apron", "pack": "Each", "price": "89.95", "returnWindowDays": 30, "restockingFeePct": 15 },
+    "DEN-050": { "name": "Articulating Paper - Blue/Red", "pack": "Box of 300 strips", "price": "13.50", "returnWindowDays": 30 },
+    "DEN-051": { "name": "Soft-Bristle Adult Toothbrush", "pack": "pack of 12", "price": "18.95", "returnWindowDays": 30 }
+  },
+  "policies": {
+    "generalReturnDays": 30,
+    "freeShippingThreshold": 150,
+    "internationalShipping": false,
+    "supportEmail": "support@dentalpilot-demo.com",
+    "supportPhone": "1-800-555-0148"
+  },
+  "orders": {
+    "ORD-1001": { "sku": "DEN-051", "deliveredDaysAgo": 12, "withinWindow": true },
+    "ORD-1002": { "sku": "DEN-051", "deliveredDaysAgo": 47, "withinWindow": false },
+    "ORD-1003": { "sku": "DEN-043", "deliveredDaysAgo": 20, "withinWindow": false }
+  }
+}
