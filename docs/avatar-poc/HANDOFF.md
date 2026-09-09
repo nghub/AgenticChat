@@ -138,6 +138,17 @@ Fast path total ≈ 5–7 days. Good path ≈ 7–10 days.
 
 Only two things start a (billed) session: the pill on the card and the mic icon in the input. Nothing on mount.
 
+## Host-page widget (2026-09-09)
+
+`public/widget.js` now renders the Salesforce-style pair of states on a
+customer site: a floating **"✨ Ask <bot>"** pill (label from
+`/api/public/bot/{key}`, or `data-launcher-label`), and on click a full-height
+panel sliding in from the side (`data-position`, `data-panel-width`, default
+460px, full width on phones) with the embed inside, an × over the embed's
+header, and Esc to close. The iframe is created on first open, so nothing loads
+before the visitor asks. Try it at `/widget-demo.html` (whitelisted in
+`proxy.ts`), which is also the copy-paste example: one `<script>` tag.
+
 ## Knowledge and guardrail acceptance (DentalPilot, 2026-09-09)
 
 Run through the real `/api/public/chat` against the seeded SAM bot (strict

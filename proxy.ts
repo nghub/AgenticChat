@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/api/public",
   "/api/health",
   "/widget.js",
+  "/widget-demo.html", // static host page that loads widget.js, for trying the launcher
   "/_next",
   "/favicon.ico",
 ];

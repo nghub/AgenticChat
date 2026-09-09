@@ -134,6 +134,17 @@ export default function EmbedChat({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // When embedded through widget.js, tell the host page the bot's name so its
+  // launcher can read "Ask <name>". Only the public display name is sent.
+  useEffect(() => {
+    if (window.parent === window) return;
+    try {
+      window.parent.postMessage({ type: "obc:ready", botName }, "*");
+    } catch {
+      // A sandboxed or cross-origin-restricted parent is fine; the launcher keeps its fallback.
+    }
+  }, [botName]);
+
   useEffect(() => {
     const eventOrigin = initialOrigin || (() => { try { return document.referrer ? new URL(document.referrer).origin : undefined; } catch { return undefined; } })();
     void fetch("/api/public/events", {
