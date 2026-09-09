@@ -262,8 +262,70 @@ class GeminiProvider implements LLMProvider {
     const data = await res.json();
     return data.embedding.values;
   }
-  async chatAgent(messages: AgentMessage[]): Promise<AgentTurn> {
-    return basicAgentFromChat((m) => this.chat(m), messages);
+
+  /**
+   * Native Gemini function calling (generateContent `tools.functionDeclarations`).
+   * Previously this fell back to plain chat, so a Gemini bot could never use
+   * its tools. Gemini does not return call ids, so we mint them; Gemini 3
+   * models also attach a thoughtSignature to a functionCall part that must be
+   * echoed back with it, kept here per call id for the length of the turn loop.
+   */
+  private thoughtSignatures = new Map<string, string>();
+
+  async chatAgent(messages: AgentMessage[], tools: ToolDef[] = []): Promise<AgentTurn> {
+    if (tools.length === 0) return basicAgentFromChat((m) => this.chat(m), messages);
+
+    const system = messages.find((m) => m.role === "system")?.content;
+    const contents: Array<{ role: "user" | "model"; parts: Record<string, unknown>[] }> = [];
+    for (const m of messages) {
+      if (m.role === "system") continue;
+      if (m.role === "tool") {
+        let response: unknown;
+        try { response = JSON.parse(m.content); } catch { response = m.content; }
+        const part = { functionResponse: { name: m.name, response: typeof response === "object" && response !== null && !Array.isArray(response) ? response : { result: response } } };
+        // Consecutive tool results belong in one user turn.
+        const last = contents[contents.length - 1];
+        if (last && last.role === "user" && last.parts.every((p) => "functionResponse" in p)) last.parts.push(part);
+        else contents.push({ role: "user", parts: [part] });
+        continue;
+      }
+      if (m.role === "assistant") {
+        const parts: Record<string, unknown>[] = [];
+        if (m.content) parts.push({ text: m.content });
+        for (const tc of m.toolCalls || []) {
+          const part: Record<string, unknown> = { functionCall: { name: tc.name, args: tc.input } };
+          const signature = this.thoughtSignatures.get(tc.id);
+          if (signature) part.thoughtSignature = signature;
+          parts.push(part);
+        }
+        if (parts.length) contents.push({ role: "model", parts });
+        continue;
+      }
+      contents.push({ role: "user", parts: [{ text: m.content }] });
+    }
+
+    const body: Record<string, unknown> = {
+      contents,
+      tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }],
+    };
+    if (system) body.systemInstruction = { parts: [{ text: system }] };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw await providerRequestError("Gemini", res);
+    const data = await res.json();
+    const parts: Array<{ text?: string; functionCall?: { name: string; args?: Record<string, unknown> }; thoughtSignature?: string }> =
+      data.candidates?.[0]?.content?.parts || [];
+
+    const text = parts.map((p) => p.text || "").join("").trim();
+    const toolCalls = parts
+      .filter((p) => p.functionCall)
+      .map((p, i) => {
+        const id = `gemini_call_${Date.now()}_${i}`;
+        if (p.thoughtSignature) this.thoughtSignatures.set(id, p.thoughtSignature);
+        return { id, name: p.functionCall!.name, input: p.functionCall!.args || {} };
+      });
+    return { done: toolCalls.length === 0, text, toolCalls };
   }
 }
 
