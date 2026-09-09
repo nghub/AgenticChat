@@ -31,7 +31,8 @@ Do NOT build a "video AI agent". Do NOT add LiveKit in the POC.
 ## Vendor facts verified (Anam)
 
 - Session token: `POST https://api.anam.ai/v1/auth/session-token`, header `Authorization: Bearer ${ANAM_API_KEY}`, body `{ clientLabel?, personaConfig: { name, avatarId, voiceId, llmId?, systemPrompt?, maxSessionLengthSeconds, skipGreeting } }` → `{ sessionToken }`. Tokens ~1h, single-use.
-- Omit `llmId` so Anam's built-in brain is disabled; our agent answers. Feed answers via `createTalkMessageStream()`; transcripts arrive via a message-history event.
+- ~~Omit `llmId` so Anam's built-in brain is disabled~~ **CORRECTED 2026-09-09 against the live API:** omitting `llmId` does NOT disable the brain, it mints a `type: "legacy"` token that falls back to a default model. You must send `llmId: "CUSTOMER_CLIENT_V1"` (listed in `GET /v1/llms` as "Disable LLM", `llmFormat: "none"`), which mints a `type: "ephemeral"` token. Our agent then answers. Feed answers via `createTalkMessageStream()`; transcripts arrive via a message-history event.
+- **Personas carry their own brain.** A persona created in the Anam dashboard has an `llmId` set (ours defaulted to GPT OSS 120B) and `llmDisabled: false`. Referencing it via `personaConfig: { personaId }` mints a `type: "stateful"` token and Anam answers - the exact second agent this POC forbids. We therefore send `name`/`avatarId`/`voiceId` inline and read those ids off the persona. A **top-level** `personaId` is silently ignored and still returns 200.
 - Billing counts from session start to end regardless of speech → **never create a session on page load; only on explicit click.**
 - Free tier: reported 30 min/month (one source said 20), 3-min session cap, 1 concurrent. Confirm at signup. No native mobile SDK (web/JS only).
 - Client SDK: `npm i @anam-ai/js-sdk` → `createClient(token)`, `streamToVideoElement(id)` (starts mic), `stopStreaming()`, `createTalkMessageStream()`.
@@ -70,7 +71,21 @@ PUBLIC_AVATAR_RATE_LIMIT_REQUESTS="5"
 PUBLIC_AVATAR_RATE_LIMIT_WINDOW_SECONDS="60"
 ```
 
-## VERIFY-ON-INSTALL (do this first, before any UI work)
+## VERIFY-ON-INSTALL — DONE (2026-09-09)
+
+Completed against `@anam-ai/js-sdk` v4.27.0 and the live API. Every ⚠ in
+`lib/avatar/providers/anam.ts` is resolved; see that file's header for the
+confirmed symbol list. Notable corrections beyond the event names:
+
+- interrupt is `client.interruptPersona()`, not a talk-stream method
+- `streamMessageChunk`/`endMessage` return promises; `endMessage` is required
+- `MESSAGE_HISTORY_UPDATED` re-emits the **whole** history every update, so
+  consumers must de-dupe on `Message.id` or every spoken turn is answered twice
+- the `llmId` correction above, which is the important one
+
+Original instructions kept below for provenance.
+
+### Original VERIFY-ON-INSTALL brief
 
 After `npm i @anam-ai/js-sdk`, inspect `node_modules/@anam-ai/js-sdk` and fix
 the ⚠-marked spots in `lib/avatar/providers/anam.ts`:
