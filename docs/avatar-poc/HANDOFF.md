@@ -206,6 +206,7 @@ threshold 0.30; retrieval scored 0.58–0.66 on every case below):
 | Opened gloves after 12 days | ✅ Non-returnable once opened (hygiene rule), offers to check the SKU |
 | $170 order paying shipping (MP-016) | ✅ $150 threshold, after discounts/before tax, exclusions |
 | "I want to speak to a person" | ✅ Support email, phone, hours |
+| Small talk ("hi", "how are you?", "thanks", "bye") | ✅ Friendly persona (added on request): "Hi! How can I help you today?", uses the visitor's name, one warm line then back to helping. Made possible by wiring the dashboard's **Tone** setting into the agent prompt - it was stored but never used; `friendly` allows contractions and stops the per-message "I am an AI" restatement, other tones keep the formal register |
 | Out of domain (capital of France) | ✅ Refused with the support contact |
 
 Two operational notes: the Gemini free tier returned **429** under this load
