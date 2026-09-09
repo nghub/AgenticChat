@@ -35,13 +35,17 @@ export function proxy(request: NextRequest) {
 }
 
 function withSecurityHeaders(response: NextResponse, pathname: string): NextResponse {
-  // The embed page is the only document that may capture audio: the optional
-  // avatar's "Speak with ..." button starts the mic, and a policy of
-  // microphone=() makes Chrome refuse without ever prompting. Everything else
-  // (dashboard, marketing, API) keeps it blocked. A host page embedding the
-  // iframe must still delegate with allow="microphone" - see widget.js.
-  const isEmbed = pathname === "/embed" || pathname.startsWith("/embed/");
-  const microphone = isEmbed ? "microphone=(self)" : "microphone=()";
+  // Only documents that carry the chat may capture audio: the embed page
+  // itself, and any page on this origin that hosts the widget iframe. A host
+  // document with microphone=() cannot delegate the mic to an iframe no matter
+  // what its allow attribute says, so the demo page must be allowed too.
+  // Everything else (dashboard, marketing, API) keeps it blocked. Customer
+  // sites that set their own Permissions-Policy need
+  //   microphone=(self "https://<this app's origin>")
+  // see docs/avatar-poc/HANDOFF.md.
+  const allowsMic =
+    pathname === "/embed" || pathname.startsWith("/embed/") || pathname === "/widget-demo.html";
+  const microphone = allowsMic ? "microphone=(self)" : "microphone=()";
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set("Permissions-Policy", `camera=(), ${microphone}, geolocation=(), payment=()`);

@@ -149,6 +149,16 @@ header, and Esc to close. The iframe is created on first open, so nothing loads
 before the visitor asks. Try it at `/widget-demo.html` (whitelisted in
 `proxy.ts`), which is also the copy-paste example: one `<script>` tag.
 
+**Microphone through the iframe needs BOTH sides.** The iframe carries
+`allow="microphone; autoplay"` (widget.js and the dashboard snippet do this),
+and the **host document** must not ban it: a page whose response has
+`Permissions-Policy: microphone=()` cannot delegate the mic to any iframe.
+Our own demo page is allowed in `proxy.ts`; a customer site that sets its own
+Permissions-Policy (most do not) needs
+`microphone=(self "https://<this app's origin>")`. Symptom when it is wrong:
+Chrome logs "Permissions policy violation: microphone is not allowed in this
+document" and never prompts.
+
 ## Knowledge and guardrail acceptance (DentalPilot, 2026-09-09)
 
 Run through the real `/api/public/chat` against the seeded SAM bot (strict
