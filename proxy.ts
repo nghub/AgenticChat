@@ -8,6 +8,7 @@ const PUBLIC_PATHS = [
   "/embed",
   "/api/auth",
   "/api/public",
+  "/api/mock", // POC order/returns stand-ins called by agent tools
   "/api/health",
   "/widget.js",
   "/widget-demo.html", // static host page that loads widget.js, for trying the launcher
