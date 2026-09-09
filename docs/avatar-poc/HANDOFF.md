@@ -159,6 +159,30 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## Agent tab: train the agent from the dashboard (2026-09-09)
+
+Persona, rules, guardrails, actions and robustness are structured config on
+`Bot.agentConfig` (JSON, versioned with publish), edited in the **Agent** tab
+and composed into the prompt by `lib/agents/agent-config.ts`
+(`composeAgentPrompt`). The tab renders the composed prompt live with the same
+function the server uses, so "what the model sees" is never hidden. The 9,340-
+char hand-written SAM prompt is gone; the seed writes structured config and
+behaviour is unchanged (greeting, precedence, clinical fallback, authority
+override, out-of-scope all still pass). The legacy free-text `systemPrompt`
+still works and is appended as "additional notes" when both are present.
+
+- **Model** is chosen per workspace (Settings); the tab shows the active
+  provider/model and links there, with the latency note (flash-lite for voice).
+- **Guardrails** are toggles with their supporting text; disabling one removes
+  its prompt section. Grounding of facts and the action validator are enforced
+  in code regardless, so a toggle cannot switch off the hard protections.
+- **Robustness** exposes the action-claim validator mode: off / audit / block.
+  SAM ships on **block** - a claimed action no tool performed is replaced with
+  an honest "I haven't actually done that yet, shall I?" reply. Stored per
+  message in `retrievalTrace.validator {mode, blocked}`.
+- Saves go to the draft; the ten evaluation cases and publish/rollback from
+  the Launch tab are the release gate. Unit tests in `tests/agent-config.test.ts`.
+
 ## How we keep SAM from hallucinating (2026-09-09)
 
 Found in a real voice session and fixed the same day. Five layers, each in
