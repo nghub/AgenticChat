@@ -49,8 +49,18 @@ const SEED: Array<{ orderNumber: string; customerName: string; deliveredDaysAgo:
   { orderNumber: "ORD-1003", customerName: "Riverside Dental", deliveredDaysAgo: 20, items: [{ ...HANDPIECE, quantity: 1 }] },
 ];
 
+/**
+ * Speech gives us "ORD1002", "ord 1002", "O R D dash 1002" or just "1002".
+ * Normalise to ORD-1002 before looking it up, so a dropped hyphen is not a
+ * "no such order" answer.
+ */
+export function normalizeOrderNumber(raw: string): string {
+  const digits = (raw.toUpperCase().match(/\d{3,}/g) || []).pop();
+  return digits ? `ORD-${digits}` : raw.trim().toUpperCase();
+}
+
 export function getMockOrder(orderNumber: string): MockOrder | null {
-  const key = orderNumber.trim().toUpperCase().replace(/\s+/g, "");
+  const key = normalizeOrderNumber(orderNumber);
   const seed = SEED.find((o) => o.orderNumber === key);
   if (!seed) return null;
   return {
@@ -82,7 +92,7 @@ const issued = new Map<string, string>();
 
 export function decideReturn(orderNumber: string, sku: string, reason: ReturnReason): ReturnDecision {
   const order = getMockOrder(orderNumber);
-  const base = { orderNumber: orderNumber.toUpperCase(), sku: sku.toUpperCase(), reason };
+  const base = { orderNumber: normalizeOrderNumber(orderNumber), sku: sku.toUpperCase(), reason };
   if (!order) return { ...base, accepted: false, daysSinceDelivery: 0, returnWindowDays: 0, declineReason: "unknown_order", nextStep: "Ask the customer to confirm the order number." };
   const item = order.items.find((i) => i.sku === sku.toUpperCase());
   if (!item) return { ...base, accepted: false, daysSinceDelivery: order.daysSinceDelivery, returnWindowDays: 0, declineReason: "sku_not_on_order", nextStep: "Confirm which item on the order the customer means." };
@@ -103,4 +113,54 @@ export function decideReturn(orderNumber: string, sku: string, reason: ReturnRea
     ...base, accepted: true, daysSinceDelivery: order.daysSinceDelivery, returnWindowDays: item.returnWindowDays, rmaNumber,
     instructions: "A prepaid return label has been emailed. Pack the item in its original packaging with the RMA number visible; the refund is processed within 3-5 business days of the seller receiving it.",
   };
+}
+
+export type EscalationReason =
+  | "RETURN_EXCEPTION" | "LOW_CONFIDENCE" | "PRODUCT_SAFETY" | "COUNTERFEIT"
+  | "PAYMENT_DISPUTE" | "ACCOUNT_SECURITY" | "LEGAL_REQUEST" | "UNSUPPORTED_PRODUCT" | "USER_REQUESTED_HUMAN";
+
+export interface Escalation {
+  ticketNumber: string;
+  conversationId?: string;
+  orderNumber?: string;
+  reason: EscalationReason;
+  summary: string;
+  responseTarget: string;
+  createdAt: string;
+}
+
+const tickets: Escalation[] = [];
+
+/**
+ * The structured escalation state from the guardrails doc (§7): a real
+ * record with a ticket number, so "I've sent this to support" is only ever
+ * said about something that exists. Response targets from MP-050.
+ */
+export function findOpenEscalation(conversationId: string): Escalation | undefined {
+  return tickets.find((t) => t.conversationId === conversationId);
+}
+
+export function createEscalation(input: { orderNumber?: string; reason: EscalationReason; summary: string; conversationId?: string }): Escalation {
+  const target: Record<EscalationReason, string> = {
+    RETURN_EXCEPTION: "within 1 business day",
+    LOW_CONFIDENCE: "within 1 business day",
+    PRODUCT_SAFETY: "priority escalation",
+    COUNTERFEIT: "priority escalation",
+    PAYMENT_DISPUTE: "within 1 business day",
+    ACCOUNT_SECURITY: "immediate escalation",
+    LEGAL_REQUEST: "within 1 business day",
+    UNSUPPORTED_PRODUCT: "within 1 business day",
+    USER_REQUESTED_HUMAN: "within 4 business hours",
+  };
+  const ticket: Escalation = {
+    ticketNumber: `SUP-${String(10000 + tickets.length + 1)}`,
+    conversationId: input.conversationId,
+    orderNumber: input.orderNumber ? normalizeOrderNumber(input.orderNumber) : undefined,
+    reason: input.reason,
+    summary: input.summary.slice(0, 500),
+    responseTarget: target[input.reason],
+    createdAt: new Date().toISOString(),
+  };
+  tickets.push(ticket);
+  return ticket;
 }
