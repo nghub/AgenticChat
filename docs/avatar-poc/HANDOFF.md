@@ -207,7 +207,7 @@ threshold 0.30; retrieval scored 0.58–0.66 on every case below):
 | $170 order paying shipping (MP-016) | ✅ $150 threshold, after discounts/before tax, exclusions |
 | "I want to speak to a person" | ✅ Support email, phone, hours |
 | Small talk ("hi", "how are you?", "thanks", "bye") | ✅ Friendly persona (added on request): "Hi! How can I help you today?", uses the visitor's name, one warm line then back to helping. Made possible by wiring the dashboard's **Tone** setting into the agent prompt - it was stored but never used; `friendly` allows contractions and stops the per-message "I am an AI" restatement, other tones keep the formal register |
-| Out of domain (capital of France) | ✅ Refused with the support contact |
+| Out of domain (capital of France) | ✅ Refused with the support contact. With tone `friendly` the code-built refusal copy is warm too ("Good question! I don't have verified information on that… I'd rather not guess. Our team can help you directly: …") - optional `*Friendly` keys in `lib/i18n/messages.ts`, English only so far, other locales fall back to their formal copy. Persona rule: **SAM is always friendly and helpful, including when the answer is no** |
 
 Two operational notes: the Gemini free tier returned **429** under this load
 (65 chunk embeddings + starter questions + ~30 chats), which the chat route

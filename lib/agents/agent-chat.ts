@@ -76,7 +76,7 @@ export async function agenticChat(
     : botRecord.defaultLocale;
   const responseLanguage = getLanguage(locale);
   const responseLanguageName = responseLanguage?.englishName || locale;
-  const REFUSAL = buildRefusalMessage(bot.fallbackBehavior, bot.contactInfo, bot.name, locale);
+  const REFUSAL = buildRefusalMessage(bot.fallbackBehavior, bot.contactInfo, bot.name, locale, bot.tone);
 
   const [tools, completedSourceCount] = await Promise.all([
     allowTools ? db.tool.findMany({ where: { botId, isActive: true } }) : Promise.resolve([]),

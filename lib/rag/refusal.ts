@@ -33,11 +33,15 @@ export function buildRefusalMessage(
   behavior: string,
   contactInfo: string | null | undefined,
   businessName: string,
-  locale = "en"
+  locale = "en",
+  tone?: string | null
 ): string {
   const m = getMessages(locale);
-  const ack = m.refusalAck;
-  const reason = m.refusalReason.replace("{business}", businessName);
+  // A bot that is "always friendly and helpful" must stay that way when the
+  // answer is no; the friendly tone uses warmer copy where a locale has it.
+  const friendly = tone === "friendly";
+  const ack = (friendly && m.refusalAckFriendly) || m.refusalAck;
+  const reason = ((friendly && m.refusalReasonFriendly) || m.refusalReason).replace("{business}", businessName);
 
   let next: string;
   switch (behavior) {
@@ -50,8 +54,8 @@ export function buildRefusalMessage(
     case "contact":
     default:
       next = contactInfo
-        ? m.refusalNextContact.replace("{contact}", contactInfo)
-        : m.refusalNextContactGeneric;
+        ? ((friendly && m.refusalNextContactFriendly) || m.refusalNextContact).replace("{contact}", contactInfo)
+        : (friendly && m.refusalNextContactGenericFriendly) || m.refusalNextContactGeneric;
       break;
   }
 
