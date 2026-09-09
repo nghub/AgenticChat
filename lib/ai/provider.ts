@@ -215,7 +215,18 @@ class GroqProvider implements LLMProvider {
 }
 
 class GeminiProvider implements LLMProvider {
-  constructor(private apiKey: string, private model: string, private embedFallback: LLMProvider) {}
+  /**
+   * embedFallback is the OpenAI provider when the workspace has an OpenAI key.
+   * Existing workspaces embedded their knowledge with OpenAI, and vectors from
+   * two different models are not comparable, so keep using OpenAI whenever it
+   * is available and only embed natively when Gemini is the sole provider.
+   */
+  constructor(
+    private apiKey: string,
+    private model: string,
+    private embeddingModel: string,
+    private embedFallback?: LLMProvider
+  ) {}
   async chat(messages: LLMMessage[]): Promise<string> {
     const system = messages.find((m) => m.role === "system")?.content;
     const contents = messages
@@ -237,7 +248,20 @@ class GeminiProvider implements LLMProvider {
     const data = await res.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   }
-  embed(text: string): Promise<number[]> { return this.embedFallback.embed(text); }
+  async embed(text: string): Promise<number[]> {
+    if (this.embedFallback) return this.embedFallback.embed(text);
+    // 1536 dims matches OpenAI's text-embedding-3-small, so a workspace can
+    // later switch providers without every stored vector changing length.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.embeddingModel}:embedContent?key=${this.apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: { parts: [{ text }] }, outputDimensionality: 1536 }),
+    });
+    if (!res.ok) throw await providerRequestError("Gemini embedding", res);
+    const data = await res.json();
+    return data.embedding.values;
+  }
   async chatAgent(messages: AgentMessage[]): Promise<AgentTurn> {
     return basicAgentFromChat((m) => this.chat(m), messages);
   }
@@ -336,8 +360,8 @@ function buildSingleProvider(name: string, config: AIConfig, openaiProvider: Ope
       const key = resolve(config.geminiApiKey, process.env.GEMINI_API_KEY);
       const model = resolveModel("gemini", resolve(config.geminiModel, process.env.GEMINI_MODEL));
       if (!key) throw new Error("Gemini API key is not configured. Add it in AI Settings.");
-      if (!openaiProvider) throw new Error("An OpenAI API key is required for embeddings when Gemini is selected. Add it in AI Settings.");
-      return new GeminiProvider(key, model, openaiProvider);
+      const embeddingModel = resolveModel("gemini", process.env.GEMINI_EMBEDDING_MODEL, "embedding");
+      return new GeminiProvider(key, model, embeddingModel, openaiProvider ?? undefined);
     }
     case "ollama": {
       const baseUrl = resolve(config.ollamaBaseUrl, process.env.OLLAMA_BASE_URL, "http://localhost:11434")!;
