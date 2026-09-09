@@ -90,7 +90,7 @@ export default function EmbedChat({
   // Optional voice+video face for the SAME agent. Every spoken turn goes
   // through /api/public/chat keyed by this component's sessionId, so context
   // carries across text -> voice -> text with no extra plumbing.
-  const AVATAR_VIDEO_ID = "piper-avatar";
+  const AVATAR_VIDEO_ID = "sam-avatar";
   const avatar = useAvatarSession({
     publicKey,
     origin,

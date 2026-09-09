@@ -241,7 +241,13 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
             // --------------------------------------------------------------
           } catch (err) {
             console.error("voice turn failed:", err);
-            // Voice is an enhancement, never a dependency: fail quietly.
+            // The text list already shows nothing; silence on the voice side
+            // reads as a hang, so say so. Text chat is unaffected either way.
+            try {
+              await provider.speak("Sorry, I could not process that. Please try again in a moment.");
+            } catch {
+              // Nothing more to do; the session may already be gone.
+            }
           }
         })
       );

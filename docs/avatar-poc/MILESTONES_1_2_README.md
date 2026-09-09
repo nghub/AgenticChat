@@ -23,8 +23,8 @@
 > sources, and the avatar speaks the same text (`avatar.speak()` in
 > `embed-chat.tsx`'s `sendMessage`). Verified live on a Gemini-only `.env`
 > (`LLM_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.5-flash-lite`);
-> the seed script ingests one paragraph of knowledge so there is something to
-> answer from, and needs an LLM configured for that step:
+> the seed script now ingests the DentalPilot PDFs under `docs/avatar-poc/knowledge/`
+> (the bot is called SAM) and needs an LLM configured for that step:
 > `set -a; source .env; set +a; npx -y tsx scripts/seed-avatar-poc.ts`
 
 Give your existing agent a face. No new brain, no LiveKit, no streaming refactor yet.
