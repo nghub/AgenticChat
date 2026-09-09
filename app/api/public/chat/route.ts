@@ -16,6 +16,7 @@ import { isProductionVersionApproved } from "@/lib/bots/production-policy";
 import { resolvePublicBotKey } from "@/lib/bots/public-key";
 import { voiceGreeting } from "@/lib/agents/voice-greeting";
 import { validateAnswer } from "@/lib/agents/output-validator";
+import { normalizeAgentConfig } from "@/lib/agents/agent-config";
 import { resolveResponseLanguage } from "@/lib/i18n/languages";
 import { getMessages } from "@/lib/i18n/messages";
 
@@ -167,8 +168,15 @@ export async function POST(req: NextRequest) {
     const latencyMs = Date.now() - startedAt;
     const evidenceScore = result.sources.length ? Math.max(...result.sources.map((source) => source.similarity)) : null;
     // Actions need evidence too: flag "I've sent this to support" when no tool did.
-    const validator = validateAnswer(result.answer, result.toolCalls.map((t) => ({ name: t.name, status: t.status })));
-    if (validator.unbackedActionClaim) console.warn(`[validator] unbacked action claim in bot ${bot.id}: "${validator.claim}"`);
+    const agentConfig = bot.agentConfig ? normalizeAgentConfig(bot.agentConfig) : null;
+    const validatorMode = agentConfig?.robustness.validatorMode ?? "audit";
+    const validator = validatorMode === "off"
+      ? { unbackedActionClaim: false as const }
+      : validateAnswer(result.answer, result.toolCalls.map((t) => ({ name: t.name, status: t.status })));
+    if (validator.unbackedActionClaim) console.warn(`[validator] unbacked action claim in bot ${bot.id} (${validatorMode}): "${validator.claim}"`);
+    // "block": never deliver a claimed action no tool performed; say so and offer it instead.
+    const blocked = validator.unbackedActionClaim && validatorMode === "block";
+    if (blocked) result.answer = agentConfig?.robustness.blockedActionReply || "I want to be accurate with you: I haven't actually completed that step yet. Would you like me to go ahead?";
 
     const assistantMessage = await db.message.create({
       data: {
@@ -186,7 +194,7 @@ export async function POST(req: NextRequest) {
         inputTokens: result.usage?.inputTokens,
         outputTokens: result.usage?.outputTokens,
         estimatedCostUsd: result.usage?.estimatedCostUsd,
-        retrievalTrace: { sourceCount: result.sources.length, toolCallCount: result.toolCalls.length, priceCatalogVersion: result.usage?.priceCatalogVersion, validator: { unbackedActionClaim: validator.unbackedActionClaim, claim: validator.claim ?? null } },
+        retrievalTrace: { sourceCount: result.sources.length, toolCallCount: result.toolCalls.length, priceCatalogVersion: result.usage?.priceCatalogVersion, validator: { unbackedActionClaim: validator.unbackedActionClaim, claim: validator.claim ?? null, mode: validatorMode, blocked } },
       },
     });
 

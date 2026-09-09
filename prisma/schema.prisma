@@ -92,6 +92,9 @@ model Bot {
   publicKey                        String              @unique @default(cuid())
   welcomeMessage                   String              @default("Hello! How can I help you today?")
   systemPrompt                     String?
+  // Structured persona / rules / guardrails edited in the Agent tab; composed
+  // into the prompt by lib/agents/agent-config.ts. Versioned with publish.
+  agentConfig                      Json?
   businessContext                  String?
   tone                             String              @default("professional")
   strictness                       String              @default("strict") // "strict" | "balanced" | "flexible"

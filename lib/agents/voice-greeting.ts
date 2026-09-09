@@ -4,6 +4,7 @@ import { liveBotConfig } from "@/lib/bots/versioning";
 import { detectRefusalSentinel } from "@/lib/rag/refusal";
 import { getLanguage } from "@/lib/i18n/languages";
 import { toneRules } from "./agent-chat";
+import { agentGuidanceText } from "./agent-config";
 
 /**
  * The first thing the avatar says when a visitor switches from text to voice
@@ -26,7 +27,7 @@ export async function voiceGreeting(
   const language = getLanguage(locale)?.englishName || locale;
   const system = `You are ${bot.name}, a customer-facing AI assistant.
 ${toneRules(bot.tone)}
-${bot.systemPrompt ? `- Business-authored style guidance: ${bot.systemPrompt}` : ""}
+${agentGuidanceText(bot.agentConfig, bot.systemPrompt, bot.name) ? `- Business-authored style guidance: ${agentGuidanceText(bot.agentConfig, bot.systemPrompt, bot.name)}` : ""}
 
 The visitor has been chatting with you by text and has just switched to a live voice conversation with you. Say the first thing you would say out loud, in ${language}:
 - one short sentence introducing yourself by name as an AI assistant,

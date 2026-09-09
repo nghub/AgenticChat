@@ -7,6 +7,7 @@ import { draftAwareBotConfig, liveBotConfig, normalizeBotConfig } from "@/lib/bo
 import { configuredModel, estimateUsage } from "@/lib/ai/cost";
 import { buildRefusalMessage, detectRefusalSentinel, refusalInstruction } from "@/lib/rag/refusal";
 import { getLanguage } from "@/lib/i18n/languages";
+import { agentGuidanceText } from "./agent-config";
 import { enforceResponseLanguage } from "@/lib/i18n/enforce-response-language";
 
 const MAX_TOOL_ITERATIONS = 5; // safety cap to prevent runaway loops
@@ -121,6 +122,9 @@ export async function agenticChat(
     };
   }
 
+  // Structured Agent-tab config composed into text; legacy free text appended as notes.
+  const guidance = agentGuidanceText(bot.agentConfig, bot.systemPrompt, bot.name);
+
   // 2. Build the system prompt — RAG context + tool guidance
   const context = relevant.length
     ? relevant.map((c, i) => `[UNTRUSTED BUSINESS SOURCE ${i + 1}]\n${c.content}\n[END SOURCE ${i + 1}]`).join("\n\n")
@@ -149,7 +153,7 @@ ${toneRules(bot.tone)}
 - RESPONSE LANGUAGE (mandatory): write the entire customer-facing answer in ${responseLanguageName} (${locale}), matching the language of the visitor's latest message. Translate supported facts from the source context into ${responseLanguageName} even when the source text is English. Keep only proper names, product names, URLs, policy identifiers, and direct citations in their original form. Never switch to English merely because the source context or earlier messages are English.${strictSourceNote}
 
 ${refusalInstruction()}
-${bot.systemPrompt ? `- Business-authored style guidance: ${bot.systemPrompt}` : ""}
+${guidance ? `- Business-authored style guidance: ${guidance}` : ""}
 ${toolGuidance}
 
 Business Knowledge Context:
