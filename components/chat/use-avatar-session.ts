@@ -249,6 +249,10 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       // 3) Route every finalized transcript through the EXISTING agent.
       unsubsRef.current.push(
         provider.onTranscript(async (transcript) => {
+          // Speech recognition emits fragments ("you", "the", "mm") on noise
+          // or a breath; sending them restarts the conversation with a
+          // greeting. Drop anything that is not at least a real word.
+          if (!/[a-z0-9\u00C0-\u024F\u0900-\u097F]{2,}/i.test(transcript)) return;
           const live = argsRef.current;
           live.appendUserMessage(transcript, "voice");
           const cancelFiller = startWaitingFiller();

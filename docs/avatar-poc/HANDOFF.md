@@ -159,6 +159,47 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## How we keep SAM from hallucinating (2026-09-09)
+
+Found in a real voice session and fixed the same day. Five layers, each in
+code where it can be, prompt where it must be:
+
+1. **Facts need evidence (code).** `agenticChat` refuses before any model
+   call when no source or tool is available, and refuses after generation
+   when nothing retrieved supports the answer. Unchanged, and the reason the
+   catalogue and policy answers cite chunks.
+2. **Actions need a tool (code + prompt).** SAM said "I'll go ahead and send
+   your case to support" three times with no tool that does that - a promise
+   the visitor believes. Now `escalate_to_support` opens a real case
+   (`POST /api/mock/escalations`, ticket number SUP-nnnnn, response target
+   from MP-050) and the prompt says a case is "sent" only with that number.
+   Returns already worked this way (`create_return_request` decides).
+3. **Output validator (code, audit-only for now).**
+   `lib/agents/output-validator.ts` runs on every answer and flags a claimed
+   action (sent, escalated, approved, refunded, created...) in a turn where
+   no successful action tool ran; offers ("would you like me to send") are
+   not flagged. The flag lands in the message's `retrievalTrace.validator`
+   and a warning is logged, so the rate is measurable: `select count(*) from
+   "Message" where "retrievalTrace"->'validator'->>'unbackedActionClaim' =
+   'true'`. Unit-tested. Turning it into an automatic rewrite is a one-line
+   decision once the rate is known.
+4. **Consent is explicit (prompt).** WRITE tools run only when the customer
+   asked for exactly that or clearly said yes to an offer; a stray word is
+   never a yes; one issue gets one ticket. A speech fragment ("you") had been
+   read as consent and opened a ticket.
+5. **Speech is noisy (code + prompt).** The hook drops transcripts that are
+   not a real word; the order lookup normalises "ORD1002", "ord 1002", "1002"
+   to ORD-1002 (a dropped hyphen had produced "no such order" twice); fillers
+   only in turns that actually called a tool, and neutral ("one second...")
+   rather than "here it is" before the result is known; a fragment gets
+   "Sorry, I didn't catch that"; "can you talk in Hindi?" is answered
+   honestly instead of ignored.
+
+Regression suite: ten evaluation cases are seeded on the bot (dashboard →
+Evaluations) covering precedence, authority override, invented discounts,
+clinical advice, no-evidence, international shipping, free shipping, out of
+scope and the language question - re-run after any prompt or model change.
+
 ## Picture-in-picture while talking (2026-09-09)
 
 During a live session the card has a minimize button. The embed derives
