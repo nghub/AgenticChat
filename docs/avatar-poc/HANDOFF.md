@@ -58,7 +58,7 @@ The drafts were exported with flattened names; restore them to:
 | `anam.ts` | `lib/avatar/providers/anam.ts` (client) |
 | `index.ts` | `lib/avatar/index.ts` |
 | `use-avatar-session.ts` | `components/chat/use-avatar-session.ts` |
-| `MILESTONE_1_README.md` | `docs/avatar-poc/MILESTONE_1_README.md` |
+| `MILESTONE_1_README.md` | `docs/avatar-poc/MILESTONES_1_2_README.md` |
 
 ## Env to add (`.env` + `.env.example`)
 
@@ -99,8 +99,8 @@ Endpoint, `createClient`, `streamToVideoElement`, `stopStreaming`,
 
 | # | Milestone | Scope | Est. |
 |---|---|---|---|
-| 1 | Avatar renders | files above + `AvatarPanel`, `SpeakWithPiperButton`, state machine TEXT→CONNECTING→VIDEO→ENDING→TEXT; hard-coded greeting; End cleans up mic/session | 1 day |
-| 2 | Existing brain speaks | typed message → `/api/public/chat` → `provider.speak(answer)` | 1 day |
+| 1 | Avatar renders — **DONE 2026-09-09** | files above + `AvatarPanel`, `SpeakWithPiperButton`, state machine TEXT→CONNECTING→VIDEO→ENDING→TEXT; hard-coded greeting; End cleans up mic/session | 1 day |
+| 2 | Existing brain speaks — **DONE 2026-09-09** | typed message → `/api/public/chat` → `provider.speak(answer)`. Verified live with Gemini-only config; see *Latency* below | 1 day |
 | 3 | Speech in | transcript → `/api/public/chat` → speak. Add Prisma migration `Message.source` enum `TEXT/VOICE`; extend chat route zod with `source?` and persist it | 1 day |
 | 4 | Shared context test | "500 employees" test (text→video); revisit `take: 12` history cap if needed | 0.5 day |
 | 5 | Interruption + cleanup | barge-in stops talk stream; End releases everything | 1 day |
@@ -108,6 +108,28 @@ Endpoint, `createClient`, `streamToVideoElement`, `stopStreaming`,
 | — | **Streaming refactor (optional, "good path")** | SSE `/api/public/chat/stream`; stream only the final generation after tools resolve; swap `provider.speak` → `speakStream` | +2–4 days |
 
 Fast path total ≈ 5–7 days. Good path ≈ 7–10 days.
+
+## Latency (learned in milestone 2 — read before picking a model)
+
+The whole voice loop is only as fast as `/api/public/chat`, and that is one
+model call. Measured on 2026-09-09 with the same grounded question:
+
+| Model | Per answer | Notes |
+|---|---|---|
+| `gemini-3.5-flash-lite` | **0.6–0.7s** | no thinking; end-to-end route ≈ 1.0s |
+| `gemini-3.8-flash` | 2–4s | thinking can be disabled, still 1.7–3.6s |
+| `gemini-3.6-flash` | **2.6s to 24.5s** | ~300 thinking tokens; rejects `thinkingBudget: 0`; one answer arrived with 0:01 left on the 120s cap |
+
+Flash Lite is the catalog "Auto" for Gemini for this reason. Whatever provider
+you use, a thinking model is the wrong default for a face that has to answer
+within a couple of seconds. This matters more, not less, once speech input
+(milestone 3) adds STT time in front of it.
+
+Also from this milestone: Gemini now embeds natively (`gemini-embedding-001`,
+pinned to 1536 dims) when no OpenAI key is set, so a Gemini-only `.env` works.
+The upstream `.env.example` shipped `OPENAI_API_KEY="sk-..."` as a truthy
+placeholder, which silently selected OpenAI for embeddings and failed with a 401;
+it is now `""`.
 
 ## Acceptance criteria (POC done when all true)
 

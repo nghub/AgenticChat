@@ -186,6 +186,21 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
     }
   }, [stop]);
 
+  /**
+   * Milestone 2: the answer to a TYPED message is spoken too. The text list
+   * is the source of truth; this just gives it a voice while a session is up.
+   * No-op in text mode, so callers do not need to check.
+   */
+  const speak = useCallback(async (text: string) => {
+    const provider = providerRef.current;
+    if (!provider || !text) return;
+    try {
+      await provider.speak(text);
+    } catch (err) {
+      console.error("avatar speak failed:", err);
+    }
+  }, []);
+
   // Widget closed mid-call: release the mic and the billed session.
   useEffect(() => {
     return () => {
@@ -195,5 +210,5 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
 
   const mode = useMemo(() => modeFor(status), [status]);
 
-  return { status, mode, error, start, stop, sessionStartedAt, maxSessionSeconds };
+  return { status, mode, error, start, stop, speak, sessionStartedAt, maxSessionSeconds };
 }

@@ -200,6 +200,8 @@ export default function EmbedChat({
         ...prev,
         { id: Date.now().toString() + "_bot", role: "assistant", content: data.handoff ? `${data.answer}\n\n${responseMessages.passToTeam}` : data.answer, messageId: data.messageId, citations: data.citations, isRefused: data.isRefused === true },
       ]);
+      // Same answer, same messageId, same refusal state - the avatar only adds a voice.
+      if (avatar.mode === "VIDEO" && typeof data.answer === "string") void avatar.speak(data.answer);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
