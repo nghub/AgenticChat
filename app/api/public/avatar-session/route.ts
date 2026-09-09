@@ -7,7 +7,7 @@ import {
 } from "@/lib/security/rate-limit";
 import { isOriginAllowed } from "@/lib/bots/origin-policy";
 import { resolvePublicBotKey } from "@/lib/bots/public-key";
-import { createAnamSessionToken } from "@/lib/avatar";
+import { createAnamSessionToken } from "@/lib/avatar/anam-session";
 
 /**
  * POST /api/public/avatar-session

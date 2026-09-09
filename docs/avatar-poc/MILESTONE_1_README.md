@@ -1,5 +1,25 @@
 # Milestone 1 — Avatar rendering + session token
 
+> **STATUS: DONE (2026-09-09).** Verified live: click -> token minted ->
+> avatar streams with the bot's welcome message spoken -> 120s countdown ->
+> End releases everything and the text chat is untouched. Full state machine
+> TEXT -> CONNECTING -> VIDEO -> ENDING -> TEXT exercised in the browser.
+>
+> To see it locally (Colima/plain Docker, no compose plugin needed - note the
+> host port is 5433, and `.env.example`'s 5432 does not match docker-compose):
+>
+> ```
+> docker run -d --name obc_postgres -p 5433:5432 \
+>   -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password -e POSTGRES_DB=openbusinesschat \
+>   -v obc_postgres_data:/var/lib/postgresql/data pgvector/pgvector:pg16
+> ```
+>
+> then set `DATABASE_URL` to `localhost:5433`, `npm run db:deploy`, then
+> `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/seed-avatar-poc.ts`
+> and open http://localhost:3000/embed/piper-avatar-poc. No LLM key needed
+> for this milestone. Milestone 2 (the agent answering spoken turns) needs
+> OPENAI_API_KEY in `.env`.
+
 Give your existing agent a face. No new brain, no LiveKit, no streaming refactor yet.
 
 ## Files (drop into your repo at these paths)
@@ -35,8 +55,8 @@ PUBLIC_AVATAR_RATE_LIMIT_WINDOW_SECONDS="60"
 
 ## Wire into embed-chat.tsx
 
-1. Add a `<video id="piper-avatar" />` inside a new `AvatarPanel` shown only in video mode.
-2. Add a **Speak with Piper** button (static thumbnail — do NOT connect on mount).
+1. Add a `<video id="piper-avatar" />` inside a new `AvatarPanel` shown only in video mode. *(done: `components/chat/avatar-panel.tsx`)*
+2. Add a **Speak with Piper** button (static thumbnail — do NOT connect on mount). *(done: `components/chat/speak-with-piper-button.tsx`, gated by `avatarEnabled` which the embed page derives from env)*
 3. Call the hook, feeding it your existing conversation state:
 
 ```tsx

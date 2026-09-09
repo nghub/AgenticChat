@@ -1,15 +1,17 @@
 /**
- * Public surface of the avatar module.
+ * Public surface of the avatar module - CLIENT-SAFE.
  *
- * - Server code imports createAnamSessionToken (holds the API key).
- * - Client code imports createAvatarProvider + the AvatarProvider type.
+ * This barrel is imported by client components, so it must never re-export
+ * anything that touches ANAM_API_KEY. Server code imports the token minter
+ * directly from "@/lib/avatar/anam-session" (which is guarded by
+ * `import "server-only"` and will fail the build if it ever leaks into a
+ * client bundle - that guard is what caught the original version of this file).
  *
  * To add a vendor later: implement AvatarProvider in providers/<vendor>.ts and
  * extend the switch in createAvatarProvider. Nothing else changes.
  */
 
 export type { AvatarProvider, AvatarStatus, Unsubscribe } from "./types";
-export { createAnamSessionToken } from "./anam-session";
 
 export type AvatarVendor = "anam" /* | "tavus" | "simli" */;
 
@@ -19,7 +21,7 @@ export async function createAvatarProvider(
 ): Promise<import("./types").AvatarProvider> {
   switch (vendor) {
     case "anam": {
-      // Dynamic import keeps the vendor SDK out of the server bundle.
+      // Dynamic import keeps the vendor SDK out of the initial bundle.
       const { AnamProvider } = await import("./providers/anam");
       return AnamProvider.fromSessionToken(sessionToken);
     }

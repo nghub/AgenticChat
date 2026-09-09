@@ -1,10 +1,13 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Send, Bot, User, UserPlus, CheckCircle2, X, ThumbsUp, ThumbsDown, BookOpen, WifiOff, Globe } from "lucide-react";
+import { Send, Bot, User, UserPlus, CheckCircle2, X, ThumbsUp, ThumbsDown, BookOpen, WifiOff, Globe, Mic } from "lucide-react";
 import SuggestedBubbles from "./suggested-bubbles";
 import { getMessages } from "@/lib/i18n/messages";
 import { getLanguage, normalizeLanguage, describeLanguages } from "@/lib/i18n/languages";
 import { MarkdownMessage } from "./markdown-message";
+import { useAvatarSession } from "./use-avatar-session";
+import AvatarPanel from "./avatar-panel";
+import SpeakWithPiperButton from "./speak-with-piper-button";
 
 interface Message {
   id: string;
@@ -14,6 +17,7 @@ interface Message {
   citations?: Array<{ title: string; url?: string | null; excerpt: string; updatedAt: string }>;
   feedback?: "POSITIVE" | "NEGATIVE";
   isRefused?: boolean;
+  source?: "text" | "voice";
 }
 
 interface Props {
@@ -27,6 +31,8 @@ interface Props {
   initialOrigin?: string;
   defaultLocale?: string;
   supportedLocales?: string[];
+  /** Server decides this from env; the button never renders when the avatar is unconfigured. */
+  avatarEnabled?: boolean;
 }
 
 interface LeadFormState {
@@ -48,6 +54,7 @@ export default function EmbedChat({
   initialOrigin,
   defaultLocale = "en",
   supportedLocales = ["en"],
+  avatarEnabled = false,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     { id: "welcome", role: "assistant", content: welcomeMessage },
@@ -76,6 +83,24 @@ export default function EmbedChat({
 
   const t = useMemo(() => getMessages(language), [language]);
   const isRtl = getLanguage(language)?.rtl === true;
+
+  // Optional voice+video face for the SAME agent. Every spoken turn goes
+  // through /api/public/chat keyed by this component's sessionId, so context
+  // carries across text -> voice -> text with no extra plumbing.
+  const AVATAR_VIDEO_ID = "piper-avatar";
+  const avatar = useAvatarSession({
+    publicKey,
+    origin,
+    locale: language,
+    videoElementId: AVATAR_VIDEO_ID,
+    greeting: welcomeMessage,
+    getSessionId: () => sessionId,
+    setSessionId,
+    appendUserMessage: (text, source) =>
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "_voice", role: "user", content: text, source }]),
+    appendAssistantMessage: (text) =>
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "_bot", role: "assistant", content: text }]),
+  });
 
   const switchLanguage = async (next: string) => {
     setLanguage(next);
@@ -287,6 +312,23 @@ export default function EmbedChat({
         </p>
       )}
 
+      {/* Avatar - only exists while a voice session is in flight */}
+      {avatar.mode !== "TEXT" && (
+        <AvatarPanel
+          videoElementId={AVATAR_VIDEO_ID}
+          mode={avatar.mode}
+          botName={botName}
+          onEnd={() => void avatar.stop()}
+          sessionStartedAt={avatar.sessionStartedAt}
+          maxSessionSeconds={avatar.maxSessionSeconds}
+        />
+      )}
+      {avatar.error && avatar.mode === "TEXT" && (
+        <p className="border-b bg-amber-50 px-4 py-1.5 text-center text-[11px] text-amber-800" role="alert">
+          {avatar.error} You can keep chatting by text.
+        </p>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((msg) => (
@@ -306,7 +348,7 @@ export default function EmbedChat({
             }`}>
               {msg.role === "assistant"
                 ? <MarkdownMessage content={msg.content} />
-                : <p className="whitespace-pre-wrap break-words leading-6">{msg.content}</p>}
+                : <p className="whitespace-pre-wrap break-words leading-6">{msg.source === "voice" && <Mic className="me-1 inline h-3 w-3 opacity-70" aria-label="Spoken" />}{msg.content}</p>}
             </div>
             {msg.role === "assistant" && msg.citations && msg.citations.length > 0 && <details className="mt-1.5 rounded-md border bg-white px-3 py-2 text-xs"><summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-600"><BookOpen className="h-3 w-3" /> {t.sources} ({msg.citations.length})</summary><div className="mt-2 space-y-2">{msg.citations.map((citation, index) => <div key={`${citation.title}-${index}`} className="border-t pt-2 first:border-0 first:pt-0"><p className="font-medium text-gray-700">{citation.url ? <a href={citation.url} target="_blank" rel="noopener noreferrer" className="underline">{citation.title}</a> : citation.title}</p><p className="mt-0.5 text-gray-500">{citation.excerpt}</p><p className="mt-1 text-[10px] text-gray-400">{t.updated} {new Date(citation.updatedAt).toLocaleDateString()}</p></div>)}</div></details>}
             {msg.role === "assistant" && msg.messageId && <div className="mt-1 flex items-center gap-1"><span className="me-1 text-[10px] text-gray-400">{t.helpfulPrompt}</span><button type="button" onClick={() => submitFeedback(msg.messageId!, "POSITIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "POSITIVE" ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markHelpful}><ThumbsUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => submitFeedback(msg.messageId!, "NEGATIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "NEGATIVE" ? "bg-orange-100 text-orange-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markNotHelpful}><ThumbsDown className="h-3.5 w-3.5" /></button></div>}
@@ -461,6 +503,13 @@ export default function EmbedChat({
 
       {/* Input */}
       <div className="p-3 bg-white border-t">
+        {avatarEnabled && avatar.mode === "TEXT" && (
+          <SpeakWithPiperButton
+            botName={botName}
+            onClick={() => void avatar.start()}
+            disabled={!online || loading}
+          />
+        )}
         <form
           className="flex gap-2"
           onSubmit={(e) => { e.preventDefault(); sendMessage(); }}

@@ -64,6 +64,7 @@ export default async function EmbedPage({
         initialOrigin={origin}
         defaultLocale={bot.defaultLocale}
         supportedLocales={bot.supportedLocales}
+        avatarEnabled={Boolean(process.env.ANAM_API_KEY && process.env.ANAM_AVATAR_ID && process.env.ANAM_VOICE_ID)}
       />
     </div>
   );

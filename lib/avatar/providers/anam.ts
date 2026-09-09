@@ -10,7 +10,7 @@
  *   - client.createTalkMessageStream(correlationId?)               confirmed, returns TalkMessageStream
  *   - client.interruptPersona(): void                              confirmed (on the client, not the stream)
  *   - TalkMessageStream.streamMessageChunk(text, endOfSpeech, utteranceId?): Promise<void>  confirmed
- *   - TalkMessageStream.endMessage(): Promise<void>                confirmed (real method, not optional)
+ *   - TalkMessageStream.endMessage(): Promise<void>                confirmed (use it OR endOfSpeech=true, not both)
  *   - AnamEvent.MESSAGE_HISTORY_UPDATED -> (messages: Message[])   confirmed
  *   - AnamEvent.CONNECTION_ESTABLISHED  -> ()                      confirmed
  *   - AnamEvent.CONNECTION_CLOSED       -> (reason, details?)      confirmed
@@ -62,9 +62,9 @@ export class AnamProvider implements AvatarProvider {
     // Non-streaming POC path: send the whole answer as one chunk.
     const talk = this.client.createTalkMessageStream();
     this.currentTalk = talk;
-    // streamMessageChunk is async - awaiting keeps ordering deterministic.
+    // endOfSpeech=true terminates the stream by itself; calling endMessage()
+    // afterwards only earns an SDK warning (confirmed in a live session).
     await talk.streamMessageChunk(text, /* endOfSpeech */ true);
-    await talk.endMessage();
   }
 
   async speakStream(chunks: AsyncIterable<string>): Promise<void> {
@@ -74,7 +74,7 @@ export class AnamProvider implements AvatarProvider {
     for await (const chunk of chunks) {
       await talk.streamMessageChunk(chunk, false);
     }
-    await talk.streamMessageChunk("", true);
+    // No final empty chunk needed: endMessage() sends the terminator.
     await talk.endMessage();
   }
 
