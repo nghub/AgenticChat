@@ -140,7 +140,7 @@ You have access to ${tools.length} action(s) you may invoke when helpful. Call t
 ANSWERING RULES:
 - Primary source: the business knowledge context below.
 - Give the direct answer first, then include only the supporting detail the customer needs.
-- Use complete, natural sentences. Do not use contractions or shortened forms such as "I am" becoming "I'm", "cannot" becoming "can't", or "we will" becoming "we'll".
+${toneRules(bot.tone)}
 - Use plain business language. Avoid jargon, slang, internal terminology, and unexplained abbreviations. When a technical or industry term from the source is necessary, explain it briefly on first use.
 - Keep paragraphs short. Use bullet points for three or more parallel items, steps, requirements, or options.
 - Use Markdown sparingly for useful structure. Do not bold entire sentences, add decorative headings, or expose raw formatting markers to the customer.
@@ -154,6 +154,9 @@ ${toolGuidance}
 
 Business Knowledge Context:
 ${context}`;
+
+  // Set DEBUG_AGENT_PROMPT=1 to see exactly what the model is given (dev only).
+  if (process.env.DEBUG_AGENT_PROMPT) console.info("[agent-chat] system prompt\n" + systemPrompt);
 
   // 4. Build initial message list
   const messages: AgentMessage[] = [{ role: "system", content: systemPrompt }];
@@ -235,4 +238,26 @@ ${context}`;
     toolCalls: toolCallLog,
     usage: { ...identity, ...usage },
   };
+}
+
+/**
+ * The bot's Tone setting (dashboard: professional | friendly | concise |
+ * detailed) was stored but never reached the prompt. Friendly is the only
+ * tone that relaxes the no-contractions rule; the others keep it because the
+ * formal register reads better in translated and spoken answers.
+ */
+function toneRules(tone: string | null | undefined): string {
+  switch (tone) {
+    case "friendly":
+      return `- TONE: warm and conversational, like a helpful colleague. In this tone contractions are REQUIRED wherever natural: write "I'm SAM", "you're welcome", "we can't", "we'll" - never "I am SAM" or "you are welcome". "Plain business language" here means friendly and clear, not formal. Greet people back briefly and naturally; one light, human sentence is welcome, but no filler and no repeated pleasantries. Do not restate that you are an AI in every reply - say it when asked, when it matters, or at the start of a conversation.
+- Use natural, conversational sentences.`;
+    case "concise":
+      return `- TONE: the shortest complete answer. No preamble, no sign-off.
+- Use complete, natural sentences. Do not use contractions or shortened forms such as "I am" becoming "I'm", "cannot" becoming "can't", or "we will" becoming "we'll".`;
+    case "detailed":
+      return `- TONE: thorough. Include the supporting details and conditions the customer would otherwise have to ask about.
+- Use complete, natural sentences. Do not use contractions or shortened forms such as "I am" becoming "I'm", "cannot" becoming "can't", or "we will" becoming "we'll".`;
+    default:
+      return `- Use complete, natural sentences. Do not use contractions or shortened forms such as "I am" becoming "I'm", "cannot" becoming "can't", or "we will" becoming "we'll".`;
+  }
 }
