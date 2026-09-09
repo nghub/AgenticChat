@@ -15,6 +15,7 @@ import { createHash } from "crypto";
 import { isProductionVersionApproved } from "@/lib/bots/production-policy";
 import { resolvePublicBotKey } from "@/lib/bots/public-key";
 import { voiceGreeting } from "@/lib/agents/voice-greeting";
+import { validateAnswer } from "@/lib/agents/output-validator";
 import { resolveResponseLanguage } from "@/lib/i18n/languages";
 import { getMessages } from "@/lib/i18n/messages";
 
@@ -165,6 +166,9 @@ export async function POST(req: NextRequest) {
     const result = await agenticChat(bot.id, message, conversation.id, history, { version: conversation.botVersion || undefined, locale: conversation.locale });
     const latencyMs = Date.now() - startedAt;
     const evidenceScore = result.sources.length ? Math.max(...result.sources.map((source) => source.similarity)) : null;
+    // Actions need evidence too: flag "I've sent this to support" when no tool did.
+    const validator = validateAnswer(result.answer, result.toolCalls.map((t) => ({ name: t.name, status: t.status })));
+    if (validator.unbackedActionClaim) console.warn(`[validator] unbacked action claim in bot ${bot.id}: "${validator.claim}"`);
 
     const assistantMessage = await db.message.create({
       data: {
@@ -182,7 +186,7 @@ export async function POST(req: NextRequest) {
         inputTokens: result.usage?.inputTokens,
         outputTokens: result.usage?.outputTokens,
         estimatedCostUsd: result.usage?.estimatedCostUsd,
-        retrievalTrace: { sourceCount: result.sources.length, toolCallCount: result.toolCalls.length, priceCatalogVersion: result.usage?.priceCatalogVersion },
+        retrievalTrace: { sourceCount: result.sources.length, toolCallCount: result.toolCalls.length, priceCatalogVersion: result.usage?.priceCatalogVersion, validator: { unbackedActionClaim: validator.unbackedActionClaim, claim: validator.claim ?? null } },
       },
     });
 
