@@ -63,5 +63,6 @@ export function refusalInstruction(): string {
   return `REFUSAL PROTOCOL:
 - If the answer to a business-specific question is NOT supported by the provided context (or by a tool result), respond with EXACTLY this token and nothing else: ${REFUSAL_SENTINEL}
 - Do not apologize, explain, or write your own refusal message — the application shows the customer an appropriate message in their language.
-- Never use the token when the context does support an answer.`;
+- Never use the token when the context does support an answer.
+- What the visitor told you earlier in this conversation (their company size, their situation, what they are looking for) is the visitor's own information, not a business claim: you may repeat it back or build on it without a source. If a message mixes that with a business question, answer the visitor's part from the conversation and the business part from the context; use the token only when NO part of the message can be answered.`;
 }
