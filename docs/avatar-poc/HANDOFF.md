@@ -159,6 +159,37 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## Retrieval root cause found in use (2026-09-09): structure-blind chunking
+
+Symptom reported by the user: "it doesn't take information from the knowledge
+base." Two separate causes:
+
+1. **Chunking.** `lib/ingestion/chunker.ts` was an 800-char sliding window with
+   no notion of structure. A 14-page policy manual became 50 chunks that each
+   blended three or four MP sections (MP-011..MP-014 in one), so the embedding
+   of "international shipping is not supported" was diluted by sales-tax and
+   delivery-time text. "Do you ship to Japan?" did not retrieve MP-013 in the
+   **top 12**. The chunker is now section-aware: a line starting a coded
+   section (`MP-013 - ...`, `DEN-043 ...`) or a Markdown heading starts a
+   chunk; sections ≥200 chars stand alone, tiny catalogue rows accumulate,
+   oversized sections are windowed with their heading kept, and the document
+   title is prefixed to every chunk. Prose without headings keeps the old
+   window. Unit tests in `tests/chunker.test.ts`. After re-ingest, MP-013 ranks
+   **#1** for "ship to Japan?" and "ship to Canada?".
+2. **Prompt over-reach.** "Guide me to the best gloves" got the clinical-advice
+   fallback. The system prompt now says catalogue recommendations by
+   documented attributes are the job; only patient-specific clinical judgement
+   is off-limits.
+
+Known remaining gap: **compound questions** ("what is your Japan policy for
+gloves?") retrieve the glove rows and precedence rules and push MP-013 out of
+the top 12. The standard fix is multi-query retrieval (have the model split
+the question into sub-queries, retrieve each, merge) - one extra model call
+per turn, ~0.6s on flash-lite, not added while the POC runs on a free-tier
+quota. Also: re-ingesting costs one embedding per chunk (87 now); three
+re-ingests in a day tripped Gemini's embedding rate limit, which then fails
+every chat turn too, because each turn embeds the query.
+
 ## Knowledge and guardrail acceptance (DentalPilot, 2026-09-09)
 
 Run through the real `/api/public/chat` against the seeded SAM bot (strict
