@@ -110,7 +110,10 @@
   iframe.id = "obc-widget-iframe";
   iframe.src = baseUrl + "/embed/" + botId + "?origin=" + encodeURIComponent(window.location.origin);
   iframe.title = "Chat";
-  iframe.allow = "clipboard-write";
+  // microphone: the optional voice avatar starts the mic on click; without
+  // this delegation the browser silently refuses inside the iframe.
+  // autoplay: the avatar's audio/video track must start without a second tap.
+  iframe.allow = "clipboard-write; microphone; autoplay";
   container.appendChild(iframe);
 
   var isOpen = false;

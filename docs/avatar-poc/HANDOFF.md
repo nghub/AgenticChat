@@ -27,6 +27,7 @@ Do NOT build a "video AI agent". Do NOT add LiveKit in the POC.
   - `@/lib/bots/public-key` → `resolvePublicBotKey(publicKey)` returns `{ bot, environment, version }`
   - `@/lib/ai/provider.ts` → the LLM provider interface pattern to mirror
 - UI: `components/chat/embed-chat.tsx` (~492 lines) does `fetch("/api/public/chat").then(r=>r.json())`.
+- **`proxy.ts` sends `Permissions-Policy: microphone=()` on every response** (found in milestone 3). That is a document-level ban: Chrome logs "Permissions policy violation: microphone is not allowed in this document" and never shows a prompt. It is now `microphone=(self)` for `/embed/*` only. A host page must also delegate with `allow="microphone; autoplay"` on the iframe - `widget.js` and the dashboard's copyable snippet do; hand-written iframes need it added.
 
 ## Vendor facts verified (Anam)
 

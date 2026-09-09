@@ -20,7 +20,7 @@ export default function EmbedTab({ bot }: Props) {
   width="400"
   height="600"
   frameborder="0"
-  allow="clipboard-write"
+  allow="clipboard-write; microphone; autoplay"
   title="${bot.name} Chat"
 ></iframe>`;
 
