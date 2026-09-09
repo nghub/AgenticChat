@@ -144,7 +144,7 @@ Only two things start a (billed) session: the pill on the card and the mic icon 
 customer site: a floating **"✨ Ask <bot>"** pill (label from
 `/api/public/bot/{key}`, or `data-launcher-label`), and on click a full-height
 panel sliding in from the side (`data-position`, `data-panel-width`, default
-460px, full width on phones) with the embed inside, an × over the embed's
+400px, full width on phones) with the embed inside, an × over the embed's
 header, and Esc to close. The iframe is created on first open, so nothing loads
 before the visitor asks. Try it at `/widget-demo.html` (whitelisted in
 `proxy.ts`), which is also the copy-paste example: one `<script>` tag.

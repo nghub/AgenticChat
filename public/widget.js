@@ -12,7 +12,7 @@
   // Optional fixed label; otherwise the embed reports the bot's name and the
   // pill becomes "Ask <name>" once it has loaded.
   var launcherLabel = script.getAttribute("data-launcher-label") || "";
-  var panelWidth = parseInt(script.getAttribute("data-panel-width") || "460", 10);
+  var panelWidth = parseInt(script.getAttribute("data-panel-width") || "400", 10);
 
   if (!botId) {
     console.warn("[OpenBusinessChat] No data-bot-id provided.");
