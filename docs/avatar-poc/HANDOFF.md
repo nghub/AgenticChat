@@ -159,6 +159,27 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## Coherence fixes: cross-turn memory + greet-once (2026-09-09)
+
+A voice session showed SAM looping - re-introducing itself and re-asking for
+an order number it had just resolved. Nothing was invented (every fact was
+correct); the causes were two coherence gaps:
+
+1. **Tool results did not survive the turn.** `get_order`'s result lived only
+   inside one turn's tool loop; the next turn's model saw only prior prose, and
+   flash-lite then re-asked for the order number. `lib/agents/conversation-
+   memory.ts` now reads the conversation's successful ToolExecution rows and
+   injects a compact "CONVERSATION MEMORY" block (orders looked up, returns
+   opened, tickets raised) into the agent prompt and the voice greeting, so
+   context survives across turns regardless of the model. Verified: "changed
+   my mind" after a lookup no longer re-asks; a locked-in eval case
+   (`mem-noreask`) guards it.
+2. **The contextual greeting re-fired on every voice re-entry**, spamming
+   "Hi, I'm SAM, I see we were talking about...". The hook now speaks the
+   context-aware greeting once per page session (`greetedRef`), and the
+   greeting is memory-aware so even when it does fire it refers to the resolved
+   order instead of re-asking.
+
 ## POC evaluation suite (2026-09-09)
 
 `evals/` is a repeatable, deterministic evaluation - the "run the same test

@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       if (!conversation || !history.some((h) => h.role === "user")) {
         return NextResponse.json({ answer: bot.welcomeMessage, sessionId: conversation?.sessionId ?? null, contextual: false }, { headers: limitHeaders });
       }
-      const answer = await voiceGreeting(bot, history, conversation.locale);
+      const answer = await voiceGreeting(bot, history, conversation.locale, conversation.id);
       const saved = await db.message.create({
         data: { conversationId: conversation.id, role: "ASSISTANT", content: answer, source: "VOICE" },
       });

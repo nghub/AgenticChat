@@ -1,0 +1,35 @@
+{
+  "total": 2,
+  "passed": 2,
+  "byKpi": {
+    "context_retention": {
+      "total": 2,
+      "pass": 2
+    }
+  },
+  "p50": 2192,
+  "p95": 2192,
+  "invented": 0,
+  "results": [
+    {
+      "id": "mem-noreask-039",
+      "category": "continuity",
+      "kpi": "context_retention",
+      "pass": true,
+      "fails": [],
+      "latencyMs": 2192,
+      "validatorFlagged": false,
+      "answer": "Yes, it's still returnable! Since it's been 12 days since delivery, it's within the 30-day return window. \n\nWould you like me to go ahead and start that return for you?"
+    },
+    {
+      "id": "cont-500-040",
+      "category": "continuity",
+      "kpi": "context_retention",
+      "pass": true,
+      "fails": [],
+      "latencyMs": 1599,
+      "validatorFlagged": false,
+      "answer": "You mentioned you have 500 employees. I don't have verified information about wholesale accounts or minimums in SAM's knowledge base, so I can't say whether it works for you. \n\nOur team can help you directly:\n- **Email:** support@dentalpilo"
+    }
+  ]
+}

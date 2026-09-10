@@ -111,6 +111,11 @@ cases.push({ id: id("order-consent"), category: "robustness", kpi: "no_hallucina
   // this probes the server-side guard directly.
   expect: { checkTurn: 1, mustNotInclude: ["I've opened", "I've sent", "I have opened", "ticket SUP"] } });
 
+// --- Cross-turn memory: an order looked up must not be re-asked ---
+cases.push({ id: id("mem-noreask"), category: "continuity", kpi: "context_retention", session: "shared",
+  turns: ["I want to return my toothbrush, order ORD-1001", "Actually, I changed my mind about the reason - is it still returnable?"],
+  expect: { checkTurn: 1, mustNotInclude: ["what's your order number", "what is your order number", "your order number so", "starts with ORD"] } });
+
 // --- Voice/text continuity ---
 cases.push({ id: id("cont-500"), category: "continuity", kpi: "context_retention", session: "shared",
   turns: [

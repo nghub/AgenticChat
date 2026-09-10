@@ -119,6 +119,9 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
   const stoppingRef = useRef(false);
   const micMutedRef = useRef(false);
   const connectedFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The context-aware greeting is spoken once per page session; re-entering
+  // voice must not replay "Hi, I'm SAM, I see we were talking about..." each time.
+  const greetedRef = useRef(false);
   // First frame painted (or fallback elapsed). Until then the card shows
   // "Connecting" and every vendor status is held back, because the greeting
   // starts before frames arrive and would otherwise flip the card onto a black
@@ -206,8 +209,8 @@ export function useAvatarSession(args: UseAvatarSessionArgs) {
       tRef.current.t1 = Date.now();
       stage = "connect";
       // Ask the agent what to say first while the media connects - no extra wait.
-      const greetingPromise: Promise<string | null> = a.getGreeting
-        ? a.getGreeting().catch(() => null)
+      const greetingPromise: Promise<string | null> = a.getGreeting && !greetedRef.current
+        ? a.getGreeting().then((g) => { if (g) greetedRef.current = true; return g; }).catch(() => null)
         : Promise.resolve(null);
 
       // 2) Build the vendor-neutral provider and connect the video element.

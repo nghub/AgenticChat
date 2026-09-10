@@ -4,6 +4,7 @@ import { liveBotConfig } from "@/lib/bots/versioning";
 import { detectRefusalSentinel } from "@/lib/rag/refusal";
 import { getLanguage } from "@/lib/i18n/languages";
 import { toneRules } from "./agent-chat";
+import { buildConversationMemory } from "./conversation-memory";
 import { agentGuidanceText } from "./agent-config";
 
 /**
@@ -19,10 +20,12 @@ import { agentGuidanceText } from "./agent-config";
 export async function voiceGreeting(
   botRecord: Bot,
   history: Array<{ role: "user" | "assistant"; content: string }>,
-  locale: string
+  locale: string,
+  conversationId: string | null = null
 ): Promise<string> {
   const bot = liveBotConfig(botRecord);
   if (!history.some((h) => h.role === "user")) return bot.welcomeMessage;
+  const memory = await buildConversationMemory(conversationId);
 
   const language = getLanguage(locale)?.englishName || locale;
   const system = `You are ${bot.name}, a customer-facing AI assistant.
@@ -32,7 +35,8 @@ ${agentGuidanceText(bot.agentConfig, bot.systemPrompt, bot.name) ? `- Business-a
 The visitor has been chatting with you by text and has just switched to a live voice conversation with you. Say the first thing you would say out loud, in ${language}:
 - one short sentence introducing yourself by name as an AI assistant,
 - a few words acknowledging what they were asking about,
-- then continue with the single next step of that conversation: ask for what you still need (for example the order number), or answer the pending question if the answer is already in the conversation.
+- then continue with the single next step of that conversation: ask for what you still need (for example the order number) ONLY if you do not already have it, or answer the pending question if the answer is already in the conversation. If the memory below shows an order was already looked up, refer to it - do not ask for the order number again.
+${memory ? `\n${memory}\n` : ""}
 Two or three short sentences, plain text, no Markdown, no lists. Do not state any product, price, policy or order fact that is not already in the conversation. Never output a refusal token.`;
 
   try {

@@ -8,6 +8,7 @@ import { configuredModel, estimateUsage } from "@/lib/ai/cost";
 import { buildRefusalMessage, detectRefusalSentinel, refusalInstruction } from "@/lib/rag/refusal";
 import { getLanguage } from "@/lib/i18n/languages";
 import { agentGuidanceText } from "./agent-config";
+import { buildConversationMemory } from "./conversation-memory";
 import { enforceResponseLanguage } from "@/lib/i18n/enforce-response-language";
 
 const MAX_TOOL_ITERATIONS = 5; // safety cap to prevent runaway loops
@@ -124,6 +125,8 @@ export async function agenticChat(
 
   // Structured Agent-tab config composed into text; legacy free text appended as notes.
   const guidance = agentGuidanceText(bot.agentConfig, bot.systemPrompt, bot.name);
+  // What tools already established this conversation, so context survives turns.
+  const memory = await buildConversationMemory(conversationId);
 
   // 2. Build the system prompt — RAG context + tool guidance
   const context = relevant.length
@@ -156,6 +159,7 @@ ${refusalInstruction()}
 ${guidance ? `- Business-authored style guidance: ${guidance}` : ""}
 ${toolGuidance}
 
+${memory ? `\n${memory}\n` : ""}
 Business Knowledge Context:
 ${context}`;
 
