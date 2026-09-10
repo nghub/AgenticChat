@@ -18,6 +18,7 @@ import { voiceGreeting } from "@/lib/agents/voice-greeting";
 import { validateAnswer } from "@/lib/agents/output-validator";
 import { normalizeAgentConfig } from "@/lib/agents/agent-config";
 import { redactPii } from "@/lib/security/pii";
+import { emitAgentEvents } from "@/lib/analytics/agent-events";
 import { resolveResponseLanguage } from "@/lib/i18n/languages";
 import { getMessages } from "@/lib/i18n/messages";
 
@@ -209,6 +210,23 @@ export async function POST(req: NextRequest) {
     }).catch((error) => {
       console.error("Handoff evaluation failed:", error);
       return null;
+    });
+
+    // Lifecycle events for the KPI dashboards and the Phase-3 A/B (R1.1/R2.7).
+    const priorSearches = await db.toolExecution.count({
+      where: { conversationId: conversation.id, status: "SUCCESS", tool: { name: "search_catalog_ranked" } },
+    });
+    await emitAgentEvents({
+      botId: bot.id,
+      workspaceId: bot.workspaceId,
+      sessionId: conversation.sessionId,
+      experimentId: conversation.experimentId,
+      experimentVariant: conversation.experimentVariant,
+      kpiProfile: agentConfig?.kpiProfile,
+      toolCalls: result.toolCalls.map((t) => ({ name: t.name, status: t.status })),
+      isRefused: result.isRefused,
+      handoff: Boolean(handoff && handoff.status && handoff.status !== "AI_ACTIVE"),
+      firstSearchThisConversation: priorSearches <= result.toolCalls.filter((t) => t.name === "search_catalog_ranked" && t.status === "success").length,
     });
 
     const citations = result.sources

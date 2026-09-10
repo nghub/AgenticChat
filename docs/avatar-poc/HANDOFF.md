@@ -159,6 +159,31 @@ Permissions-Policy (most do not) needs
 Chrome logs "Permissions policy violation: microphone is not allowed in this
 document" and never prompts.
 
+## PRD: Support + Discovery on one runtime (2026-09-10)
+
+Implemented the buildable surface of `PRD-retail-conversational-agent-phased.md`
+(full status: docs/avatar-poc/PRD-STATUS.md). Two agents now run on the same
+runtime as configuration:
+
+- **SAM** (`piper-avatar-poc`) = Support: post-purchase tools, RESOLVE objective,
+  resolution KPI.
+- **NOVA** (`nova-discovery-poc`) = Discovery: a rubric ranking engine
+  (`lib/discovery/ranker.ts`) over a 24-SKU audio catalog, pre-transaction tools
+  (search_catalog_ranked / check_availability / compare_products / add_to_cart
+  stub), consultative policy, CONVERT objective, conversion KPI. All ten Part-3
+  Discovery probes pass (`evals/discovery-poc/cases.json`); Support still passes
+  its own - no leakage either direction.
+
+Phase 0/1: PII redaction (`lib/security/pii.ts`), a reranker
+(`lib/rag/rerank.ts`, `RETRIEVAL_RERANK`), and type-as-config (agentConfig gains
+type / objective / kpiProfile / channels). Phase 3 infra: sticky per-session
+avatar A/B arm assignment with a logged `avatar.arm_assigned` event, on NOVA
+only; the lift result needs real traffic. Phase 4: avatar kill switch
+(`channels.avatar = "off"`) and independent tool toggles.
+
+Not buildable here (documented in PRD-STATUS.md): the A/B *result* (traffic),
+security review, real partner feed, LOIs.
+
 ## Coherence fixes: cross-turn memory + greet-once (2026-09-09)
 
 A voice session showed SAM looping - re-introducing itself and re-asking for

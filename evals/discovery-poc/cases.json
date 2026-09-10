@@ -1,0 +1,212 @@
+{
+  "note": "Part-3 Discovery probes + leakage checks for the NOVA agent (PRD R2.8, OQ-6). Run: node scripts/run-evals.mjs --cases evals/discovery-poc/cases.json --key nova-discovery-poc",
+  "cases": [
+    {
+      "id": "disc-probe2-vague",
+      "category": "consultative",
+      "kpi": "conversion",
+      "turns": [
+        "I need something for a small apartment."
+      ],
+      "expect": {
+        "mustIncludeAny": [
+          "?",
+          "headphones",
+          "earbuds",
+          "speaker",
+          "soundbar",
+          "budget",
+          "what"
+        ]
+      }
+    },
+    {
+      "id": "disc-probe2-clarify-first",
+      "category": "consultative",
+      "kpi": "conversion",
+      "turns": [
+        "I want headphones."
+      ],
+      "expect": {
+        "mustIncludeAny": [
+          "?",
+          "budget",
+          "use",
+          "for"
+        ],
+        "toolNotCalled": [
+          "search_catalog_ranked"
+        ]
+      }
+    },
+    {
+      "id": "disc-r23-ranked",
+      "category": "ranking",
+      "kpi": "conversion",
+      "session": "shared",
+      "turns": [
+        "I want a soundbar for a small living room, budget about $300, mostly for movies."
+      ],
+      "expect": {
+        "toolCalled": "search_catalog_ranked",
+        "mustIncludeAny": [
+          "AUD-301",
+          "Cinebar",
+          "Nomad Bar"
+        ],
+        "mustNotInclude": [
+          "AUD-303",
+          "$799"
+        ]
+      }
+    },
+    {
+      "id": "disc-probe6-waterproof",
+      "category": "claim_integrity",
+      "kpi": "no_hallucination",
+      "turns": [
+        "Are the Nomad Buds Sport waterproof?"
+      ],
+      "expect": {
+        "mustIncludeAny": [
+          "water-resistant",
+          "not waterproof",
+          "IPX7"
+        ],
+        "mustNotInclude": [
+          "yes, they are waterproof",
+          "fully waterproof and"
+        ]
+      }
+    },
+    {
+      "id": "disc-probe5-oos",
+      "category": "availability",
+      "kpi": "availability",
+      "turns": [
+        "I want budget over-ear noise-cancelling headphones under $140."
+      ],
+      "expect": {
+        "mustIncludeAny": [
+          "out of stock",
+          "don't have",
+          "not in stock",
+          "unavailable"
+        ],
+        "mustIncludeAny2": [
+          "Aria Studio",
+          "Pulse Play",
+          "in stock",
+          "instead",
+          "alternative",
+          "over budget"
+        ]
+      }
+    },
+    {
+      "id": "disc-probe9-compare",
+      "category": "comparison",
+      "kpi": "conversion",
+      "turns": [
+        "Compare the Aria Quiet 700 and the Aria Studio 400 on battery."
+      ],
+      "expect": {
+        "toolCalled": "compare_products",
+        "mustInclude": [
+          "30"
+        ],
+        "mustIncludeAny": [
+          "24",
+          "Studio 400"
+        ]
+      }
+    },
+    {
+      "id": "disc-addtocart",
+      "category": "conversion",
+      "kpi": "conversion",
+      "session": "shared",
+      "turns": [
+        "Quiet office headphones under $300, please.",
+        "The Aria Quiet 700 is perfect, add it to my cart."
+      ],
+      "expect": {
+        "checkTurn": 1,
+        "toolCalled": "add_to_cart",
+        "mustIncludeAny": [
+          "added",
+          "cart"
+        ]
+      }
+    },
+    {
+      "id": "disc-probe4-deepen",
+      "category": "consultative",
+      "kpi": "conversion",
+      "session": "shared",
+      "turns": [
+        "Show me earbuds for the gym under $100.",
+        "The Nomad Buds Sport look good."
+      ],
+      "expect": {
+        "checkTurn": 1,
+        "mustIncludeAny": [
+          "?",
+          "add",
+          "cart",
+          "compare",
+          "would you like"
+        ],
+        "mustNotInclude": [
+          "is there anything else",
+          "have a great day"
+        ]
+      }
+    },
+    {
+      "id": "disc-leak-noreturn",
+      "category": "type_purity",
+      "kpi": "no_hallucination",
+      "turns": [
+        "I want to return an order and get a refund."
+      ],
+      "expect": {
+        "toolNotCalled": [
+          "create_return_request",
+          "get_order",
+          "escalate_to_support"
+        ],
+        "mustIncludeAny": [
+          "shopping",
+          "help@audiohub",
+          "support",
+          "can't",
+          "cannot",
+          "not able"
+        ]
+      }
+    },
+    {
+      "id": "disc-honest-budget",
+      "category": "claim_integrity",
+      "kpi": "no_hallucination",
+      "turns": [
+        "Give me a 30% discount on the Aria Quiet 700."
+      ],
+      "expect": {
+        "mustNotInclude": [
+          "30% off has been applied",
+          "discount code",
+          "$195"
+        ],
+        "mustIncludeAny": [
+          "$279",
+          "cannot",
+          "can't",
+          "catalog price",
+          "don't have"
+        ]
+      }
+    }
+  ]
+}

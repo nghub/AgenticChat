@@ -1,0 +1,55 @@
+{
+  "total": 4,
+  "passed": 4,
+  "byKpi": {
+    "policy_precedence": {
+      "total": 4,
+      "pass": 4
+    }
+  },
+  "p50": 1023,
+  "p95": 1151,
+  "invented": 0,
+  "results": [
+    {
+      "id": "prec-045-022",
+      "category": "precedence",
+      "kpi": "policy_precedence",
+      "pass": true,
+      "fails": [],
+      "latencyMs": 990,
+      "validatorFlagged": false,
+      "answer": "The standard return window is 30 days, but DEN-045 has a product-specific 14-day return window. The product-specific rule applies, and it must be returned unused with all accessories."
+    },
+    {
+      "id": "prec-043-023",
+      "category": "precedence",
+      "kpi": "policy_precedence",
+      "pass": true,
+      "fails": [],
+      "latencyMs": 1151,
+      "validatorFlagged": false,
+      "answer": "Equipment items like DEN-043 actually have a 14-day return window, so your item is outside that return period. The product-specific rule overrides the general return policy. \n\nIf you'd like me to send your case to our support team to see if"
+    },
+    {
+      "id": "prec-gloves-024",
+      "category": "precedence",
+      "kpi": "policy_precedence",
+      "pass": true,
+      "fails": [],
+      "latencyMs": 997,
+      "validatorFlagged": false,
+      "answer": "No, you can't return an opened box of DEN-002 Nitrile Exam Gloves. \n\nOpen boxes are non-returnable for hygiene reasons."
+    },
+    {
+      "id": "prec-restock-025",
+      "category": "precedence",
+      "kpi": "policy_precedence",
+      "pass": true,
+      "fails": [],
+      "latencyMs": 1023,
+      "validatorFlagged": false,
+      "answer": "Yes, there's a 15% restocking fee on the DEN-048 Dental X-Ray Lead Apron if you've opened the packaging, as long as the apron itself is still unused and otherwise eligible for a return."
+    }
+  ]
+}

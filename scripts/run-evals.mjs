@@ -8,7 +8,7 @@
 // Grading is deterministic (no LLM judge) so it is free of the provider quota
 // and gives the same verdict every run. Facts are checked against
 // evals/dental-poc/catalog.json.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
@@ -16,11 +16,13 @@ const flag = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0
 const BASE = flag("base", "http://localhost:3000");
 const LIMIT = Number(flag("limit", "0")) || 0;
 const ONLY = flag("only", "");
-const PUBLIC_KEY = "piper-avatar-poc";
+const CASES = flag("cases", "evals/dental-poc/cases.json");
+const CATALOG = flag("catalog", "evals/dental-poc/catalog.json");
+const PUBLIC_KEY = flag("key", "piper-avatar-poc");
 
-const suite = JSON.parse(readFileSync("evals/dental-poc/cases.json", "utf8"));
-const catalog = JSON.parse(readFileSync("evals/dental-poc/catalog.json", "utf8"));
-const knownSkus = new Set(Object.keys(catalog.skus));
+const suite = JSON.parse(readFileSync(CASES, "utf8"));
+const catalog = existsSync(CATALOG) ? JSON.parse(readFileSync(CATALOG, "utf8")) : { skus: {} };
+const knownSkus = new Set([...Object.keys(catalog.skus || {}), ...(catalog.allSkuIds || [])]);
 let cases = suite.cases;
 if (ONLY) cases = cases.filter((c) => c.category === ONLY);
 if (LIMIT) cases = cases.slice(0, LIMIT);
@@ -60,6 +62,7 @@ function grade(expect, answer, response, tools, questionText) {
   if (expect.mustIncludeAny2 && !expect.mustIncludeAny2.some(has)) fails.push(`none of [${expect.mustIncludeAny2.join(", ")}]`);
   for (const s of expect.mustNotInclude || []) if (has(s)) fails.push(`must not contain "${s}"`);
   if (expect.toolCalled && !tools.includes(expect.toolCalled)) fails.push(`tool ${expect.toolCalled} not called (called: ${tools.join(",") || "none"})`);
+  for (const t of expect.toolNotCalled || []) if (tools.includes(t)) fails.push(`tool ${t} must not be called`);
   if (expect.noInventedSku) {
     const asked = new Set((questionText.match(/DEN-\d{3}/gi) || []).map((s) => s.toUpperCase()));
     const invented = [...new Set((answer.match(/DEN-\d{3}/gi) || []).map((s) => s.toUpperCase()))].filter((s) => !knownSkus.has(s) && !asked.has(s));

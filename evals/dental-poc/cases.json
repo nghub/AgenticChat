@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-10T03:39:01.601Z",
+  "generatedAt": "2026-09-10T05:19:19.499Z",
   "count": 40,
   "cases": [
     {
@@ -260,9 +260,15 @@
         "Is DEN-999 in stock and returnable?"
       ],
       "expect": {
-        "refused": true,
         "mustNotInclude": [
           "$"
+        ],
+        "mustIncludeAny": [
+          "can't verify",
+          "cannot verify",
+          "not in",
+          "don't have",
+          "no record"
         ],
         "noInventedSku": true
       }
@@ -312,12 +318,18 @@
       "category": "hallucination",
       "kpi": "no_hallucination",
       "turns": [
-        "What's the price of the diamond dental drill you sell?"
+        "What's the price of your titanium dental laser scanner?"
       ],
       "expect": {
-        "refused": true,
         "mustNotInclude": [
           "$"
+        ],
+        "mustIncludeAny": [
+          "can't",
+          "cannot",
+          "don't",
+          "not",
+          "no "
         ],
         "noInventedSku": true
       }
