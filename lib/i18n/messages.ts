@@ -57,6 +57,12 @@ export interface WidgetMessages {
   refusalNextContactGeneric: string;
   refusalNextClarify: string;
   refusalNextGeneral: string; // "{contactSuffix}" placeholder
+  // Optional warmer variants used when the bot's tone is "friendly"; a locale
+  // without them falls back to its formal copy above.
+  refusalAckFriendly?: string;
+  refusalReasonFriendly?: string; // "{business}" placeholder
+  refusalNextContactFriendly?: string; // "{contact}" placeholder
+  refusalNextContactGenericFriendly?: string;
 }
 
 const en: WidgetMessages = {
@@ -102,6 +108,10 @@ const en: WidgetMessages = {
   refusalNextContactGeneric: "Please contact the business directly. The team will be glad to help.",
   refusalNextClarify: "Could you tell me a bit more about what you're looking for? A different wording might help me find it.",
   refusalNextGeneral: "I can share general information, but for specifics the team is your best bet{contactSuffix}.",
+  refusalAckFriendly: "Good question!",
+  refusalReasonFriendly: "I don't have verified information on that in {business}'s knowledge base yet, so I'd rather not guess.",
+  refusalNextContactFriendly: "Our team can help you directly: {contact}",
+  refusalNextContactGenericFriendly: "Our team can help you directly - just reach out and they'll take it from there.",
 };
 
 const es: WidgetMessages = {

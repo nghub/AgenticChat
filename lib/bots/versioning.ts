@@ -1,12 +1,14 @@
 import { Prisma, type Bot } from "@prisma/client";
 import { db } from "@/lib/db/client";
 import { writeAuditEvent } from "@/lib/security/audit";
+import { normalizeAgentConfig, type AgentConfig } from "@/lib/agents/agent-config";
 
 export interface BotConfig {
   name: string;
   description: string | null;
   welcomeMessage: string;
   systemPrompt: string | null;
+  agentConfig: AgentConfig | null;
   businessContext: string | null;
   tone: string;
   strictness: string;
@@ -36,6 +38,7 @@ export function liveBotConfig(bot: Bot): BotConfig {
     description: bot.description,
     welcomeMessage: bot.welcomeMessage,
     systemPrompt: bot.systemPrompt,
+    agentConfig: bot.agentConfig ? normalizeAgentConfig(bot.agentConfig) : null,
     businessContext: bot.businessContext,
     tone: bot.tone,
     strictness: bot.strictness,
@@ -83,6 +86,7 @@ export function normalizeBotConfig(input: Partial<BotConfig>, fallback: BotConfi
     description: typeof input.description === "string" || input.description === null ? input.description : fallback.description,
     welcomeMessage: typeof input.welcomeMessage === "string" ? input.welcomeMessage : fallback.welcomeMessage,
     systemPrompt: typeof input.systemPrompt === "string" || input.systemPrompt === null ? input.systemPrompt : fallback.systemPrompt,
+    agentConfig: input.agentConfig === null ? null : input.agentConfig && typeof input.agentConfig === "object" ? normalizeAgentConfig(input.agentConfig) : fallback.agentConfig,
     businessContext: typeof input.businessContext === "string" || input.businessContext === null ? input.businessContext : fallback.businessContext,
     tone: typeof input.tone === "string" ? input.tone : fallback.tone,
     strictness: typeof input.strictness === "string" ? input.strictness : fallback.strictness,
@@ -104,6 +108,7 @@ function configUpdate(config: BotConfig): Prisma.BotUpdateInput {
     description: config.description,
     welcomeMessage: config.welcomeMessage,
     systemPrompt: config.systemPrompt,
+    agentConfig: config.agentConfig ? (config.agentConfig as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
     businessContext: config.businessContext,
     tone: config.tone,
     strictness: config.strictness,

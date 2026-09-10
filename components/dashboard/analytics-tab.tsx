@@ -24,6 +24,8 @@ interface Analytics {
   resolved: number;
   containmentRate: number;
   resolutionRate: number;
+  kpiProfile?: "resolution" | "conversion" | "neutral";
+  conversion?: { needsElicited: number; shortlistsDelivered: number; comparesRun: number; addToCart: number; conversionRate: number };
   actionSuccess: number;
   actionFailure: number;
   usage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number; priceCatalogVersion: string };
@@ -62,7 +64,21 @@ export default function AnalyticsTab({ botId }: { botId: string }) {
     ? Math.round((data.totalLeads / data.totalConversations) * 100)
     : 0;
 
+  const isConversion = data.kpiProfile === "conversion";
+  const c = data.conversion;
+  const primary = isConversion
+    ? { label: "Add-to-cart rate", value: `${c?.conversionRate ?? 0}%`, sub: "Primary KPI · conversion / revenue" }
+    : { label: "Resolution rate", value: `${data.resolutionRate}%`, sub: "Primary KPI · containment / resolution" };
+  const conversionTiles = isConversion && c
+    ? [
+        { label: "Add to cart", value: c.addToCart, icon: TrendingUp, color: "text-emerald-600" },
+        { label: "Shortlists delivered", value: c.shortlistsDelivered, icon: Gauge, color: "text-indigo-600" },
+        { label: "Needs elicited", value: c.needsElicited, icon: MessageSquare, color: "text-blue-600" },
+        { label: "Comparisons run", value: c.comparesRun, icon: ShieldCheck, color: "text-purple-600" },
+      ]
+    : [];
   const stats = [
+    ...conversionTiles,
     { label: "Conversations", value: data.totalConversations, icon: Users, color: "text-blue-600" },
     { label: "Total messages", value: data.totalMessages, icon: MessageSquare, color: "text-green-600" },
     { label: "Refused answers", value: data.refusedMessages, icon: ThumbsDown, color: "text-orange-500" },
@@ -84,6 +100,11 @@ export default function AnalyticsTab({ botId }: { botId: string }) {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border bg-gray-900 p-4 text-white">
+        <p className="text-xs uppercase tracking-wide text-white/60">{primary.sub}</p>
+        <p className="mt-1 text-3xl font-bold">{primary.value}</p>
+        <p className="text-sm text-white/70">{primary.label}</p>
+      </div>
       <div className="flex justify-end"><a href={`/api/admin/bots/${botId}/analytics?format=csv`}><Button size="sm" variant="outline">Export redacted CSV</Button></a></div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map((stat) => (

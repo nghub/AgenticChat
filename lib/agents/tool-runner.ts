@@ -117,6 +117,10 @@ export async function executeTool(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "User-Agent": "OpenChat-Agent/0.1",
+    // Lets an endpoint make WRITE actions idempotent per conversation (one
+    // support case per chat, one RMA per order) instead of trusting the model
+    // not to call it twice.
+    ...(conversationId ? { "X-Conversation-Id": conversationId } : {}),
     ...toolHeaders(tool),
   };
 

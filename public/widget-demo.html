@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DentalPilot - widget demo host page</title>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 18px 40px; border-bottom: 1px solid #e5e7eb; }
+    .brand { font-weight: 700; font-size: 20px; color: #0b5cad; }
+    nav a { margin-left: 24px; color: #374151; text-decoration: none; font-weight: 500; }
+    .hero { background: #0b5cad; color: #fff; padding: 96px 40px; text-align: center; }
+    .hero h1 { font-size: 56px; margin: 0 0 16px; }
+    .hero p { font-size: 20px; max-width: 640px; margin: 0 auto 32px; opacity: 0.9; }
+    .hero button { background: #fff; color: #0b5cad; border: none; border-radius: 999px; padding: 14px 28px; font-size: 16px; font-weight: 600; }
+    section { padding: 64px 40px; max-width: 1100px; margin: 0 auto; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; }
+    footer { background: #0f2a47; color: #cbd5e1; padding: 40px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">DentalPilot Marketplace</div>
+    <nav><a href="#">Products</a><a href="#">Sellers</a><a href="#">Policies</a><a href="#">Support</a></nav>
+  </header>
+  <div class="hero">
+    <h1>Every dental supply.<br />One checkout.</h1>
+    <p>Compare 50 synthetic SKUs across sellers, with the return rules that actually apply to each one. This page exists to host the chat widget.</p>
+    <button type="button">Browse the catalog</button>
+  </div>
+  <section>
+    <div class="grid">
+      <div class="card"><h3>PPE &amp; infection control</h3><p>Gloves, masks, wipes. Non-returnable once opened.</p></div>
+      <div class="card"><h3>Equipment</h3><p>Handpieces and curing lights carry a 14-day return window and a 12-month warranty.</p></div>
+      <div class="card"><h3>Free shipping over $150</h3><p>After discounts, before tax. Some sellers and oversized items excluded.</p></div>
+    </div>
+  </section>
+  <footer>Synthetic POC content. Not a real marketplace. Call us at 1-800-555-0148.</footer>
+
+  <!-- The only integration a customer site needs. -->
+  <script src="/widget.js" data-bot-id="piper-avatar-poc" data-color="#0b5cad" async></script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { normalizeAgentConfig } from "@/lib/agents/agent-config";
 import { getSession } from "@/lib/auth/jwt";
 import { db } from "@/lib/db/client";
 import { saveBotDraft } from "@/lib/bots/versioning";
@@ -38,6 +39,8 @@ const updateSchema = z.object({
   description: z.string().max(500).optional(),
   welcomeMessage: z.string().max(500).optional(),
   systemPrompt: z.string().max(4000).optional(),
+  // Structured config from the Agent tab; normalised in saveBotDraft.
+  agentConfig: z.record(z.string(), z.unknown()).optional().nullable(),
   businessContext: z.string().max(2000).optional(),
   tone: z.enum(["professional", "friendly", "concise", "detailed"]).optional(),
   strictness: z.enum(["strict", "balanced", "flexible", "moderate"]).optional(),
@@ -93,7 +96,7 @@ export async function PATCH(
       });
     }
 
-    const updated = await saveBotDraft(botId, data);
+    const updated = await saveBotDraft(botId, { ...data, agentConfig: data.agentConfig === null ? null : data.agentConfig ? normalizeAgentConfig(data.agentConfig) : undefined });
     await writeAuditEvent({ type: "bot.draft.updated", actorId: session.userId, workspaceId: bot.workspaceId, targetType: "bot", targetId: botId, metadata: { draftRevision: updated.draftRevision } });
     return NextResponse.json({ bot: updated, draft: updated.draftConfig, draftRevision: updated.draftRevision });
   } catch (err) {

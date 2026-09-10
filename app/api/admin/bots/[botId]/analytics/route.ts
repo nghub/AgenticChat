@@ -60,6 +60,24 @@ export async function GET(
     .slice(0, 20)
     .map((m) => m.content.slice(0, 100));
 
+  // Conversion funnel for a Discovery bot (R2.7): from server-emitted events.
+  const kpiProfile = (bot.agentConfig && typeof bot.agentConfig === "object" && !Array.isArray(bot.agentConfig)
+    ? (bot.agentConfig as { kpiProfile?: string }).kpiProfile : undefined) || "neutral";
+  const eventCounts = await db.platformEvent.groupBy({
+    by: ["type"],
+    where: { botId, type: { in: ["discovery.needs_elicited", "discovery.shortlist_delivered", "discovery.compare_run", "discovery.add_to_cart"] } },
+    _count: true,
+  });
+  const evc = (t: string) => eventCounts.find((e) => e.type === t)?._count || 0;
+  const addToCart = evc("discovery.add_to_cart");
+  const conversion = {
+    needsElicited: evc("discovery.needs_elicited"),
+    shortlistsDelivered: evc("discovery.shortlist_delivered"),
+    comparesRun: evc("discovery.compare_run"),
+    addToCart,
+    conversionRate: totalConversations ? Math.round((addToCart / totalConversations) * 100) : 0,
+  };
+
   const responseBody = {
     totalConversations,
     totalMessages,
@@ -81,6 +99,8 @@ export async function GET(
     resolved,
     containmentRate: totalConversations ? Math.round(((totalConversations - handoffs) / totalConversations) * 100) : 0,
     resolutionRate: totalConversations ? Math.round((resolved / totalConversations) * 100) : 0,
+    kpiProfile,
+    conversion,
     actionSuccess: actionStats.find((item) => item.status === "SUCCESS")?._count || 0,
     actionFailure: actionStats.find((item) => item.status === "ERROR")?._count || 0,
     usage: {

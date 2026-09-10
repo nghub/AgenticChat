@@ -40,6 +40,9 @@ function isPrivateIp(address: string): boolean {
 }
 
 async function assertPublicUrl(url: URL): Promise<void> {
+  // Development only: let agent tools reach mock endpoints on this machine.
+  // Never set in production - the guard below exists to stop SSRF.
+  if (process.env.NODE_ENV !== "production" && process.env.ALLOW_PRIVATE_TOOL_HOSTS === "1") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only HTTP and HTTPS website URLs are supported.");
   }

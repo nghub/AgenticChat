@@ -33,11 +33,15 @@ export function buildRefusalMessage(
   behavior: string,
   contactInfo: string | null | undefined,
   businessName: string,
-  locale = "en"
+  locale = "en",
+  tone?: string | null
 ): string {
   const m = getMessages(locale);
-  const ack = m.refusalAck;
-  const reason = m.refusalReason.replace("{business}", businessName);
+  // A bot that is "always friendly and helpful" must stay that way when the
+  // answer is no; the friendly tone uses warmer copy where a locale has it.
+  const friendly = tone === "friendly";
+  const ack = (friendly && m.refusalAckFriendly) || m.refusalAck;
+  const reason = ((friendly && m.refusalReasonFriendly) || m.refusalReason).replace("{business}", businessName);
 
   let next: string;
   switch (behavior) {
@@ -50,8 +54,8 @@ export function buildRefusalMessage(
     case "contact":
     default:
       next = contactInfo
-        ? m.refusalNextContact.replace("{contact}", contactInfo)
-        : m.refusalNextContactGeneric;
+        ? ((friendly && m.refusalNextContactFriendly) || m.refusalNextContact).replace("{contact}", contactInfo)
+        : (friendly && m.refusalNextContactGenericFriendly) || m.refusalNextContactGeneric;
       break;
   }
 
@@ -63,5 +67,6 @@ export function refusalInstruction(): string {
   return `REFUSAL PROTOCOL:
 - If the answer to a business-specific question is NOT supported by the provided context (or by a tool result), respond with EXACTLY this token and nothing else: ${REFUSAL_SENTINEL}
 - Do not apologize, explain, or write your own refusal message — the application shows the customer an appropriate message in their language.
-- Never use the token when the context does support an answer.`;
+- Never use the token when the context does support an answer.
+- What the visitor told you earlier in this conversation (their company size, their situation, what they are looking for) is the visitor's own information, not a business claim: you may repeat it back or build on it without a source. If a message mixes that with a business question, answer the visitor's part from the conversation and the business part from the context; use the token only when NO part of the message can be answered.`;
 }

@@ -1,10 +1,13 @@
 "use client";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Send, Bot, User, UserPlus, CheckCircle2, X, ThumbsUp, ThumbsDown, BookOpen, WifiOff, Globe } from "lucide-react";
+import { Send, Bot, UserPlus, CheckCircle2, X, ThumbsUp, ThumbsDown, BookOpen, WifiOff, Globe, Mic } from "lucide-react";
 import SuggestedBubbles from "./suggested-bubbles";
 import { getMessages } from "@/lib/i18n/messages";
 import { getLanguage, normalizeLanguage, describeLanguages } from "@/lib/i18n/languages";
 import { MarkdownMessage } from "./markdown-message";
+import { useAvatarSession } from "./use-avatar-session";
+import AvatarPanel from "./avatar-panel";
+import type { AvatarImages } from "@/lib/avatar";
 
 interface Message {
   id: string;
@@ -14,6 +17,7 @@ interface Message {
   citations?: Array<{ title: string; url?: string | null; excerpt: string; updatedAt: string }>;
   feedback?: "POSITIVE" | "NEGATIVE";
   isRefused?: boolean;
+  source?: "text" | "voice";
 }
 
 interface Props {
@@ -27,6 +31,13 @@ interface Props {
   initialOrigin?: string;
   defaultLocale?: string;
   supportedLocales?: string[];
+  /** Server decides this from env; the avatar card never renders when unconfigured. */
+  avatarEnabled?: boolean;
+  /** Static stills for the idle card, looked up server-side. */
+  avatarImages?: AvatarImages | null;
+  /** Avatar A/B: randomly assign this session to text vs avatar (PRD Phase 3). */
+  avatarAbTest?: boolean;
+  avatarAbAllocation?: number;
 }
 
 interface LeadFormState {
@@ -48,6 +59,10 @@ export default function EmbedChat({
   initialOrigin,
   defaultLocale = "en",
   supportedLocales = ["en"],
+  avatarEnabled = false,
+  avatarImages = null,
+  avatarAbTest = false,
+  avatarAbAllocation = 50,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     { id: "welcome", role: "assistant", content: welcomeMessage },
@@ -56,6 +71,48 @@ export default function EmbedChat({
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [hideSuggestions, setHideSuggestions] = useState(false);
+  // Picture-in-picture while a voice session is live. Only meaningful when a
+  // host page (widget.js) can shrink the panel around us; direct /embed use
+  // has no page to reveal. The layout is derived so it can never be "mini"
+  // without a live session, and the host is told on every change.
+  const [embedded, setEmbedded] = useState(false);
+  const [wantMini, setWantMini] = useState(false);
+  useEffect(() => {
+    setEmbedded(window.parent !== window);
+  }, []);
+
+  // Phase-3 avatar A/B: assign this session to an arm, sticky per browser, and
+  // log the assignment once. Arm "avatar" gets the avatar; "text" is the same
+  // brain with the avatar hidden (modality isolation, R3.3).
+  const [avatarArm, setAvatarArm] = useState<boolean>(true);
+  useEffect(() => {
+    if (!avatarAbTest) return;
+    let assigned: "avatar" | "text";
+    try {
+      const key = `obc-arm-${publicKey}`;
+      const saved = window.localStorage.getItem(key);
+      if (saved === "avatar" || saved === "text") {
+        assigned = saved;
+      } else {
+        assigned = Math.random() * 100 < avatarAbAllocation ? "avatar" : "text";
+        window.localStorage.setItem(key, assigned);
+      }
+    } catch {
+      assigned = Math.random() * 100 < avatarAbAllocation ? "avatar" : "text";
+    }
+    setAvatarArm(assigned === "avatar");
+    void fetch("/api/public/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicKey, type: "avatar.arm_assigned", origin: initialOrigin, metadata: { arm: assigned } }),
+    }).catch(() => undefined);
+  }, [avatarAbTest, avatarAbAllocation, publicKey, initialOrigin]);
+  // The avatar is shown when configured AND (no A/B, or this session's arm is avatar).
+  const avatarActive = avatarEnabled && (!avatarAbTest || avatarArm);
+  // Starter questions are for a visitor who has not engaged yet. The first
+  // keystroke, a picked question, a sent message or a voice session hides
+  // them for good - they never come back mid-conversation.
+  const [engaged, setEngaged] = useState(false);
   const [language, setLanguage] = useState(defaultLocale);
   const [questions, setQuestions] = useState<string[]>(suggestedQuestions);
   const [leadFormOpen, setLeadFormOpen] = useState(false);
@@ -76,6 +133,65 @@ export default function EmbedChat({
 
   const t = useMemo(() => getMessages(language), [language]);
   const isRtl = getLanguage(language)?.rtl === true;
+
+  // Optional voice+video face for the SAME agent. Every spoken turn goes
+  // through /api/public/chat keyed by this component's sessionId, so context
+  // carries across text -> voice -> text with no extra plumbing.
+  const AVATAR_VIDEO_ID = "sam-avatar";
+  const startVoice = () => {
+    setEngaged(true);
+    setWantMini(false);
+    void avatar.start();
+  };
+  const avatar = useAvatarSession({
+    publicKey,
+    origin,
+    locale: language,
+    videoElementId: AVATAR_VIDEO_ID,
+    greeting: welcomeMessage,
+    // Mid-conversation switch to voice: the same agent says where we left
+    // off ("I see you want to return your toothbrush - what's your order
+    // number?") instead of the welcome script, and it lands in the transcript.
+    getGreeting: async () => {
+      if (!hasUserMessage || !sessionId) return null;
+      const res = await fetch("/api/public/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publicKey, intent: "voice_greeting", sessionId, origin, locale: language }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.contextual || typeof data.answer !== "string" || !data.answer) return null;
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "_greet", role: "assistant", content: data.answer, messageId: data.messageId }]);
+      return data.answer;
+    },
+    getSessionId: () => sessionId,
+    setSessionId,
+    appendUserMessage: (text, source) =>
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "_voice", role: "user", content: text, source }]),
+    appendAssistantMessage: (text) =>
+      setMessages((prev) => [...prev, { id: Date.now().toString() + "_bot", role: "assistant", content: text }]),
+  });
+  const mini = embedded && wantMini && avatar.mode === "VIDEO";
+  useEffect(() => {
+    if (!embedded) return;
+    try {
+      window.parent.postMessage({ type: "obc:layout", layout: mini ? "mini" : "panel" }, "*");
+    } catch {
+      // A restricted parent just keeps the panel as it is.
+    }
+  }, [embedded, mini]);
+  // The host closes the panel while a session is live: end it rather than
+  // keep streaming (and billing) invisibly.
+  useEffect(() => {
+    if (!embedded) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; open?: boolean } | null;
+      if (data?.type === "obc:panel" && data.open === false) void avatar.stop("user");
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [embedded, avatar]);
 
   const switchLanguage = async (next: string) => {
     setLanguage(next);
@@ -105,6 +221,17 @@ export default function EmbedChat({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // When embedded through widget.js, tell the host page the bot's name so its
+  // launcher can read "Ask <name>". Only the public display name is sent.
+  useEffect(() => {
+    if (window.parent === window) return;
+    try {
+      window.parent.postMessage({ type: "obc:ready", botName }, "*");
+    } catch {
+      // A sandboxed or cross-origin-restricted parent is fine; the launcher keeps its fallback.
+    }
+  }, [botName]);
 
   useEffect(() => {
     const eventOrigin = initialOrigin || (() => { try { return document.referrer ? new URL(document.referrer).origin : undefined; } catch { return undefined; } })();
@@ -147,9 +274,13 @@ export default function EmbedChat({
   const sendMessage = async (text?: string) => {
     const userText = (text ?? input).trim();
     if (!userText || loading || !online) return;
+    setEngaged(true);
     setInput("");
     setMessages((prev) => [...prev, { id: Date.now().toString(), role: "user", content: userText }]);
     setLoading(true);
+    // Typing while the avatar talks is a barge-in: stop her so the new answer is not queued.
+    if (avatar.mode === "VIDEO") void avatar.interrupt();
+    const cancelFiller = avatar.mode === "VIDEO" ? avatar.startWaitingFiller() : () => undefined;
 
     try {
       const res = await fetch("/api/public/chat", {
@@ -158,6 +289,7 @@ export default function EmbedChat({
         body: JSON.stringify({ publicKey, message: userText, sessionId, origin, locale: language }),
       });
       const data = await res.json();
+      cancelFiller();
       if (!res.ok) throw new Error(data.error || "Failed");
       if (data.sessionId) setSessionId(data.sessionId);
       const responseMessages = typeof data.locale === "string" ? getMessages(data.locale) : t;
@@ -175,7 +307,10 @@ export default function EmbedChat({
         ...prev,
         { id: Date.now().toString() + "_bot", role: "assistant", content: data.handoff ? `${data.answer}\n\n${responseMessages.passToTeam}` : data.answer, messageId: data.messageId, citations: data.citations, isRefused: data.isRefused === true },
       ]);
+      // Same answer, same messageId, same refusal state - the avatar only adds a voice.
+      if (avatar.mode === "VIDEO" && typeof data.answer === "string") void avatar.speak(data.answer);
     } catch (err) {
+      cancelFiller();
       setMessages((prev) => [
         ...prev,
         {
@@ -249,7 +384,7 @@ export default function EmbedChat({
   return (
     <div className="flex flex-col h-full" dir={isRtl ? "rtl" : "ltr"} lang={language}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b bg-gray-900 text-white">
+      <div className={`flex items-center gap-3 px-4 py-3 border-b bg-gray-900 text-white ${mini ? "hidden" : ""}`}>
         <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center">
           <Bot className="w-4 h-4" />
         </div>
@@ -281,40 +416,58 @@ export default function EmbedChat({
           </div>
         )}
       </div>
-      {supportedLocales.length > 1 && (
+      {supportedLocales.length > 1 && !mini && (
         <p className="border-b bg-gray-50 px-4 py-1.5 text-center text-[11px] text-gray-500">
           {t.availableInLanguages.replace("{languages}", describeLanguages(supportedLocales))}
         </p>
       )}
 
+      {/* Avatar card: face first, collapses to a pill once the visitor has spoken or typed */}
+      {avatarActive && (
+        <AvatarPanel
+          videoElementId={AVATAR_VIDEO_ID}
+          mode={avatar.mode}
+          status={avatar.status}
+          botName={botName}
+          images={avatarImages}
+          compact={hasUserMessage}
+          disabled={!online}
+          onStart={startVoice}
+          onEnd={() => void avatar.stop("user")}
+          micMuted={avatar.micMuted}
+          onToggleMic={avatar.toggleMic}
+          sessionStartedAt={avatar.sessionStartedAt}
+          maxSessionSeconds={avatar.maxSessionSeconds}
+          mini={mini}
+          onMinimize={embedded ? () => setWantMini(true) : undefined}
+          onRestore={embedded ? () => setWantMini(false) : undefined}
+        />
+      )}
+      {avatar.error && avatar.mode === "TEXT" && (
+        <p className="border-b bg-amber-50 px-4 py-1.5 text-center text-[11px] text-amber-800" role="alert">
+          {avatar.error} You can keep chatting by text.
+        </p>
+      )}
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div className={`flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 ${mini ? "hidden" : ""}`}>
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex gap-2 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-              msg.role === "user" ? "bg-gray-900" : "bg-white border border-gray-200"
-            }`}>
-              {msg.role === "user"
-                ? <User className="w-3.5 h-3.5 text-white" />
-                : <Bot className="w-3.5 h-3.5 text-gray-600" />}
+          msg.role === "user" ? (
+            <div key={msg.id} className="flex justify-end">
+              <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-gray-200 px-3.5 py-2 text-sm text-gray-900">
+                <p className="whitespace-pre-wrap break-words leading-6">{msg.source === "voice" && <Mic className="me-1 inline h-3 w-3 opacity-70" aria-label="Spoken" />}{msg.content}</p>
+              </div>
             </div>
-            <div className="min-w-0 max-w-[85%]">
-            <div className={`overflow-hidden rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
-              msg.role === "user"
-                ? "bg-gray-900 text-white rounded-tr-sm"
-                : "bg-white text-gray-900 rounded-tl-sm border border-gray-100"
-            }`}>
-              {msg.role === "assistant"
-                ? <MarkdownMessage content={msg.content} />
-                : <p className="whitespace-pre-wrap break-words leading-6">{msg.content}</p>}
+          ) : (
+            <div key={msg.id} className="min-w-0 max-w-[92%] text-sm text-gray-900">
+              <MarkdownMessage content={msg.content} />
+              {msg.citations && msg.citations.length > 0 && <details className="mt-1.5 rounded-md border bg-white px-3 py-2 text-xs"><summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-600"><BookOpen className="h-3 w-3" /> {t.sources} ({msg.citations.length})</summary><div className="mt-2 space-y-2">{msg.citations.map((citation, index) => <div key={`${citation.title}-${index}`} className="border-t pt-2 first:border-0 first:pt-0"><p className="font-medium text-gray-700">{citation.url ? <a href={citation.url} target="_blank" rel="noopener noreferrer" className="underline">{citation.title}</a> : citation.title}</p><p className="mt-0.5 text-gray-500">{citation.excerpt}</p><p className="mt-1 text-[10px] text-gray-400">{t.updated} {new Date(citation.updatedAt).toLocaleDateString()}</p></div>)}</div></details>}
+              {msg.messageId && <div className="mt-1 flex items-center gap-1"><span className="me-1 text-[10px] text-gray-400">{t.helpfulPrompt}</span><button type="button" onClick={() => submitFeedback(msg.messageId!, "POSITIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "POSITIVE" ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markHelpful}><ThumbsUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => submitFeedback(msg.messageId!, "NEGATIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "NEGATIVE" ? "bg-orange-100 text-orange-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markNotHelpful}><ThumbsDown className="h-3.5 w-3.5" /></button></div>}
             </div>
-            {msg.role === "assistant" && msg.citations && msg.citations.length > 0 && <details className="mt-1.5 rounded-md border bg-white px-3 py-2 text-xs"><summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-600"><BookOpen className="h-3 w-3" /> {t.sources} ({msg.citations.length})</summary><div className="mt-2 space-y-2">{msg.citations.map((citation, index) => <div key={`${citation.title}-${index}`} className="border-t pt-2 first:border-0 first:pt-0"><p className="font-medium text-gray-700">{citation.url ? <a href={citation.url} target="_blank" rel="noopener noreferrer" className="underline">{citation.title}</a> : citation.title}</p><p className="mt-0.5 text-gray-500">{citation.excerpt}</p><p className="mt-1 text-[10px] text-gray-400">{t.updated} {new Date(citation.updatedAt).toLocaleDateString()}</p></div>)}</div></details>}
-            {msg.role === "assistant" && msg.messageId && <div className="mt-1 flex items-center gap-1"><span className="me-1 text-[10px] text-gray-400">{t.helpfulPrompt}</span><button type="button" onClick={() => submitFeedback(msg.messageId!, "POSITIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "POSITIVE" ? "bg-emerald-100 text-emerald-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markHelpful}><ThumbsUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => submitFeedback(msg.messageId!, "NEGATIVE")} className={`flex h-8 w-8 items-center justify-center rounded-md ${msg.feedback === "NEGATIVE" ? "bg-orange-100 text-orange-700" : "text-gray-400 hover:bg-white"}`} aria-label={t.markNotHelpful}><ThumbsDown className="h-3.5 w-3.5" /></button></div>}
-            </div>
-          </div>
+          )
         ))}
         {showRefusalActions && (
-          <div className="flex flex-wrap gap-2 ps-9">
+          <div className="flex flex-wrap gap-2">
             {refusalActions.map((action) => (
               <button
                 key={action.label}
@@ -423,11 +576,8 @@ export default function EmbedChat({
           </div>
         )}
         {loading && (
-          <div className="flex gap-2">
-            <div className="w-7 h-7 bg-white border border-gray-200 rounded-full flex items-center justify-center">
-              <Bot className="w-3.5 h-3.5 text-gray-600" />
-            </div>
-            <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+          <div className="flex gap-2" role="status" aria-label="Thinking">
+            <div className="px-1 py-2">
               <div className="flex gap-1">
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -440,8 +590,8 @@ export default function EmbedChat({
       </div>
 
       {/* Suggested questions strip — transparent, blends with chat background */}
-      {!online && <div className="flex items-center justify-center gap-2 border-t bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status"><WifiOff className="h-3.5 w-3.5" /> {t.offlineBanner}</div>}
-      {!hideSuggestions && questions.length > 0 && (
+      {!online && !mini && <div className="flex items-center justify-center gap-2 border-t bg-amber-50 px-3 py-2 text-xs text-amber-800" role="status"><WifiOff className="h-3.5 w-3.5" /> {t.offlineBanner}</div>}
+      {!hideSuggestions && !engaged && !mini && questions.length > 0 && (
         <div className="relative bg-gray-50 px-3 pt-2 pb-1 max-h-[40%] overflow-y-auto">
           <button
             type="button"
@@ -460,20 +610,37 @@ export default function EmbedChat({
       )}
 
       {/* Input */}
-      <div className="p-3 bg-white border-t">
+      <div className={`p-3 bg-white border-t ${mini ? "hidden" : ""}`}>
         <form
           className="flex gap-2"
           onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
           /* sendMessage takes optional text param; submit form uses input state */
         >
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={t.typeMessage}
-            disabled={loading || !online}
-            className="flex-1 min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          />
+          <div className="relative flex-1 min-w-0">
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                if (e.target.value && !engaged) setEngaged(true);
+                setInput(e.target.value);
+              }}
+              placeholder={t.typeMessage}
+              disabled={loading || !online}
+              className={`w-full min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${avatarActive && avatar.mode === "TEXT" ? "pe-11" : ""}`}
+            />
+            {/* Second way in: the mic in the field starts the same voice session. Hidden once a session owns the mic. */}
+            {avatarActive && avatar.mode === "TEXT" && (
+              <button
+                type="button"
+                onClick={startVoice}
+                disabled={!online}
+                className="absolute end-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40"
+                aria-label={`Speak with ${botName}`}
+              >
+                <Mic className="h-4 w-4" aria-hidden />
+              </button>
+            )}
+          </div>
           <button
             type="submit"
             disabled={loading || !online || !input.trim()}
@@ -484,7 +651,7 @@ export default function EmbedChat({
           </button>
         </form>
         <p className="text-center text-xs text-gray-400 mt-2">
-          {privacyNotice} {t.poweredBy} <a href="https://github.com/Hemang-ai/OpenChat" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">OpenBusinessChat</a>
+          {privacyNotice}{avatarActive && " Voice sessions are processed by our avatar provider and may be recorded."} {t.poweredBy} <a href="https://github.com/Hemang-ai/OpenChat" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">OpenBusinessChat</a>
         </p>
       </div>
     </div>

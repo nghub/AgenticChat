@@ -2,6 +2,8 @@ import { Metadata } from "next";
 import EmbedChat from "@/components/chat/embed-chat";
 import { getSuggestedQuestions } from "@/lib/rag/suggested-questions";
 import { resolvePublicBotKey } from "@/lib/bots/public-key";
+import { getAnamAvatarImages } from "@/lib/avatar/anam-avatar";
+import { normalizeAgentConfig } from "@/lib/agents/agent-config";
 
 export async function generateMetadata({
   params,
@@ -51,6 +53,14 @@ export default async function EmbedPage({
     }
   }
 
+  // The avatar is optional and server-configured; the browser never sees the key.
+  const envAvatar = Boolean(process.env.ANAM_API_KEY && process.env.ANAM_AVATAR_ID && process.env.ANAM_VOICE_ID);
+  const agentConfig = bot.agentConfig ? normalizeAgentConfig(bot.agentConfig) : null;
+  const channels = agentConfig?.channels;
+  // Kill switch (R4.5): "off" force-hides the avatar even when the keys exist.
+  const avatarEnabled = envAvatar && channels?.avatar !== "off";
+  const avatarImages = avatarEnabled ? await getAnamAvatarImages() : null;
+
   return (
     <div className="h-screen bg-white">
       <EmbedChat
@@ -64,6 +74,10 @@ export default async function EmbedPage({
         initialOrigin={origin}
         defaultLocale={bot.defaultLocale}
         supportedLocales={bot.supportedLocales}
+        avatarEnabled={avatarEnabled}
+        avatarImages={avatarImages}
+        avatarAbTest={Boolean(avatarEnabled && channels?.avatarAbTest)}
+        avatarAbAllocation={channels?.avatarAbAllocation ?? 50}
       />
     </div>
   );

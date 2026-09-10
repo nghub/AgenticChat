@@ -51,13 +51,21 @@ export const PROVIDER_MODELS: Record<
     chatAuto: "llama-3.1-8b-instant",
   },
   gemini: {
+    // Verified against GET /v1beta/models on 2026-09-09: the 1.5 and 2.0
+    // generations are retired (404 "no longer available"). Auto is Flash Lite
+    // because it is the only one with predictable latency: measured 0.6-0.7s
+    // per grounded answer, versus 2.6s-24.5s for 3.6 Flash on identical input
+    // (it thinks ~300 tokens and rejects thinkingBudget: 0). Chat widgets and
+    // the voice avatar both need the predictable one.
     chat: [
-      { id: "auto", label: "Auto (recommended)", description: "Gemini 1.5 Flash" },
-      { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash", description: "Fast, generous free tier" },
-      { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro", description: "Higher quality" },
-      { id: "gemini-2.0-flash-exp", label: "Gemini 2.0 Flash (experimental)" },
+      { id: "auto", label: "Auto (recommended)", description: "Gemini 3.5 Flash Lite" },
+      { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", description: "Fastest, cheapest, no thinking" },
+      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", description: "Newest Flash (2-4s)" },
+      { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", description: "Thinking model, latency varies widely" },
+      { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)", description: "Higher quality" },
     ],
-    chatAuto: "gemini-1.5-flash",
+    chatAuto: "gemini-3.5-flash-lite",
+    embeddingAuto: "gemini-embedding-001",
   },
   ollama: {
     chat: [

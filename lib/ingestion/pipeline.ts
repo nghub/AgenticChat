@@ -97,7 +97,7 @@ export async function ingestKnowledgeSource(
       },
     });
 
-    const chunks = chunkText(text);
+    const chunks = chunkText(text, { title });
     // Process embeddings in batches
     const BATCH = 10;
     for (let i = 0; i < chunks.length; i += BATCH) {

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, XCircle, User, Bot, Clock3, UserRoundCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle, XCircle, User, Bot, Clock3, UserRoundCheck, Mic } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { MarkdownMessage } from "@/components/chat/markdown-message";
 interface Message {
   id: string;
   role: string;
+  source?: "TEXT" | "VOICE";
   content: string;
   isGrounded?: boolean;
   isRefused?: boolean;
@@ -156,7 +157,9 @@ export default function LogsTab({ botId }: { botId: string }) {
                         msg.role === "USER" ? "bg-gray-900" : "bg-gray-100"
                       }`}>
                         {msg.role === "USER"
-                          ? <User className="w-3 h-3 text-white" />
+                          ? (msg.source === "VOICE"
+                              ? <Mic className="w-3 h-3 text-white" aria-label="Spoken via avatar" />
+                              : <User className="w-3 h-3 text-white" />)
                           : <Bot className="w-3 h-3 text-gray-600" />}
                       </div>
                       <div className="max-w-[80%]">
@@ -167,6 +170,7 @@ export default function LogsTab({ botId }: { botId: string }) {
                             ? <MarkdownMessage content={msg.content} />
                             : <p className="whitespace-pre-wrap break-words">{msg.content}</p>}
                         </div>
+                        {msg.source === "VOICE" && <p className="mt-0.5 text-[10px] text-gray-400">{msg.role === "USER" ? "spoken" : "spoken by the avatar"}</p>}
                         {msg.role === "ASSISTANT" && msg.isRefused !== null && msg.isRefused !== undefined && (
                           <div className="flex items-center gap-1 mt-1">
                             {msg.isRefused

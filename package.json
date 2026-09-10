@@ -19,6 +19,7 @@
     "secrets:migrate": "ts-node scripts/migrate-workspace-secrets.ts"
   },
   "dependencies": {
+    "@anam-ai/js-sdk": "^4.27.0",
     "@anthropic-ai/sdk": "^0.95.2",
     "@aws-sdk/client-s3": "^3.1087.0",
     "@hookform/resolvers": "^5.2.2",
