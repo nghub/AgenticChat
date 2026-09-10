@@ -107,6 +107,31 @@ export default function AgentTab({ botId, botName, initial, legacySystemPrompt, 
       </Card>
 
       <Card>
+        <CardHeader><CardTitle className="text-base">Channels &amp; experiment</CardTitle><CardDescription>Avatar kill switch and the avatar A/B. The A/B belongs on a Discovery agent - validating the avatar on Support is disallowed as a thesis test.</CardDescription></CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>Avatar</Label>
+            <Select
+              ariaLabel="Avatar channel"
+              value={config.channels.avatar}
+              onChange={(v) => update((d) => { d.channels.avatar = (v as AgentConfig["channels"]["avatar"]) || "inherit"; })}
+              options={[
+                { value: "inherit", label: "Inherit", description: "On when the avatar provider is configured for this deployment" },
+                { value: "off", label: "Off (kill switch)", description: "Force-hide the avatar even when keys exist" },
+              ]}
+            />
+          </div>
+          <Toggle checked={config.channels.avatarAbTest} onChange={(v) => update((d) => { d.channels.avatarAbTest = v; })} label="Run the avatar A/B" hint="Randomly assign sessions to text vs avatar (same brain), log the arm, and measure lift." />
+          {config.channels.avatarAbTest && (
+            <div className="ps-7">
+              <Label>Avatar arm allocation (% of sessions)</Label>
+              <Input type="number" min={0} max={100} value={config.channels.avatarAbAllocation} onChange={(e) => update((d) => { d.channels.avatarAbAllocation = Math.max(0, Math.min(100, Number(e.target.value) || 0)); })} className="max-w-28" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle className="text-base">Persona</CardTitle><CardDescription>Who the agent is and how it sounds. Tone (friendly / professional) is in Settings.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           <div><Label>Role</Label><Input value={config.persona.role} onChange={(e) => update((d) => { d.persona.role = e.target.value; })} placeholder="the AI assistant for the DentalPilot Marketplace" /></div>

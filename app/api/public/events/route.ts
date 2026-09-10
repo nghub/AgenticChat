@@ -18,6 +18,7 @@ const schema = z.object({
     "avatar.interrupted",
     "avatar.session_ended",
     "avatar.session_failed",
+    "avatar.arm_assigned",
   ]),
   sessionId: z.string().max(120).optional(),
   origin: z.string().url().max(500).optional(),

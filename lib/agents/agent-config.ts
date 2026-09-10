@@ -22,6 +22,15 @@ export interface AgentConfig {
   objective: { goal: string; successState: string };
   /** Which metric the dashboard treats as primary (Probe #7). */
   kpiProfile: KpiProfile;
+  /** Per-bot channel kill switches and the avatar A/B (PRD R3.1, R4.5). */
+  channels: {
+    /** "off" force-hides the avatar regardless of env (kill switch). */
+    avatar: "inherit" | "on" | "off";
+    /** Randomly assign sessions to text vs avatar to measure lift (Phase 3). */
+    avatarAbTest: boolean;
+    /** Percent of sessions in the avatar arm when the A/B is on. */
+    avatarAbAllocation: number;
+  };
   persona: {
     /** "DentalPilot's AI assistant for its dental supply marketplace" */
     role: string;
@@ -68,6 +77,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
   type: "neutral",
   objective: { goal: "Answer the visitor's question accurately from the provided sources, or hand off when you cannot.", successState: "question_answered" },
   kpiProfile: "neutral",
+  channels: { avatar: "inherit", avatarAbTest: false, avatarAbAllocation: 50 },
   persona: {
     role: "the AI assistant for this business",
     style: "Friendly, upbeat and to the point - a helpful colleague at the counter, not a form letter.",
@@ -124,9 +134,13 @@ export function normalizeAgentConfig(input: unknown): AgentConfig {
   const type = o.type === "support" || o.type === "discovery" ? o.type : "neutral";
   const kpi = o.kpiProfile === "resolution" || o.kpiProfile === "conversion" ? o.kpiProfile : "neutral";
   const obj = (o.objective && typeof o.objective === "object" ? o.objective : {}) as Record<string, unknown>;
+  const ch = (o.channels && typeof o.channels === "object" ? o.channels : {}) as Record<string, unknown>;
+  const avatarMode = ch.avatar === "on" || ch.avatar === "off" ? ch.avatar : "inherit";
+  const alloc = typeof ch.avatarAbAllocation === "number" && ch.avatarAbAllocation >= 0 && ch.avatarAbAllocation <= 100 ? Math.round(ch.avatarAbAllocation) : 50;
   return {
     version: 1,
     type,
+    channels: { avatar: avatarMode, avatarAbTest: bool(ch.avatarAbTest, false), avatarAbAllocation: alloc },
     objective: { goal: str(obj.goal, d.objective.goal).slice(0, 400), successState: str(obj.successState, d.objective.successState).slice(0, 80) },
     kpiProfile: kpi,
     persona: {

@@ -38,6 +38,7 @@ const AGENT_CONFIG: AgentConfig = {
     successState: "resolved_without_human",
   },
   kpiProfile: "resolution",
+  channels: { avatar: "inherit", avatarAbTest: false, avatarAbAllocation: 50 },
   persona: {
     role: "the AI assistant for the DentalPilot Marketplace (a POC with synthetic data)",
     style: "Friendly, upbeat and to the point - a helpful colleague at the counter, not a form letter.",

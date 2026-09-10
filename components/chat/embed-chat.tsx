@@ -35,6 +35,9 @@ interface Props {
   avatarEnabled?: boolean;
   /** Static stills for the idle card, looked up server-side. */
   avatarImages?: AvatarImages | null;
+  /** Avatar A/B: randomly assign this session to text vs avatar (PRD Phase 3). */
+  avatarAbTest?: boolean;
+  avatarAbAllocation?: number;
 }
 
 interface LeadFormState {
@@ -58,6 +61,8 @@ export default function EmbedChat({
   supportedLocales = ["en"],
   avatarEnabled = false,
   avatarImages = null,
+  avatarAbTest = false,
+  avatarAbAllocation = 50,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     { id: "welcome", role: "assistant", content: welcomeMessage },
@@ -75,6 +80,35 @@ export default function EmbedChat({
   useEffect(() => {
     setEmbedded(window.parent !== window);
   }, []);
+
+  // Phase-3 avatar A/B: assign this session to an arm, sticky per browser, and
+  // log the assignment once. Arm "avatar" gets the avatar; "text" is the same
+  // brain with the avatar hidden (modality isolation, R3.3).
+  const [avatarArm, setAvatarArm] = useState<boolean>(true);
+  useEffect(() => {
+    if (!avatarAbTest) return;
+    let assigned: "avatar" | "text";
+    try {
+      const key = `obc-arm-${publicKey}`;
+      const saved = window.localStorage.getItem(key);
+      if (saved === "avatar" || saved === "text") {
+        assigned = saved;
+      } else {
+        assigned = Math.random() * 100 < avatarAbAllocation ? "avatar" : "text";
+        window.localStorage.setItem(key, assigned);
+      }
+    } catch {
+      assigned = Math.random() * 100 < avatarAbAllocation ? "avatar" : "text";
+    }
+    setAvatarArm(assigned === "avatar");
+    void fetch("/api/public/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicKey, type: "avatar.arm_assigned", origin: initialOrigin, metadata: { arm: assigned } }),
+    }).catch(() => undefined);
+  }, [avatarAbTest, avatarAbAllocation, publicKey, initialOrigin]);
+  // The avatar is shown when configured AND (no A/B, or this session's arm is avatar).
+  const avatarActive = avatarEnabled && (!avatarAbTest || avatarArm);
   // Starter questions are for a visitor who has not engaged yet. The first
   // keystroke, a picked question, a sent message or a voice session hides
   // them for good - they never come back mid-conversation.
@@ -389,7 +423,7 @@ export default function EmbedChat({
       )}
 
       {/* Avatar card: face first, collapses to a pill once the visitor has spoken or typed */}
-      {avatarEnabled && (
+      {avatarActive && (
         <AvatarPanel
           videoElementId={AVATAR_VIDEO_ID}
           mode={avatar.mode}
@@ -592,10 +626,10 @@ export default function EmbedChat({
               }}
               placeholder={t.typeMessage}
               disabled={loading || !online}
-              className={`w-full min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${avatarEnabled && avatar.mode === "TEXT" ? "pe-11" : ""}`}
+              className={`w-full min-h-11 min-w-0 px-3 text-base rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent ${avatarActive && avatar.mode === "TEXT" ? "pe-11" : ""}`}
             />
             {/* Second way in: the mic in the field starts the same voice session. Hidden once a session owns the mic. */}
-            {avatarEnabled && avatar.mode === "TEXT" && (
+            {avatarActive && avatar.mode === "TEXT" && (
               <button
                 type="button"
                 onClick={startVoice}
@@ -617,7 +651,7 @@ export default function EmbedChat({
           </button>
         </form>
         <p className="text-center text-xs text-gray-400 mt-2">
-          {privacyNotice}{avatarEnabled && " Voice sessions are processed by our avatar provider and may be recorded."} {t.poweredBy} <a href="https://github.com/Hemang-ai/OpenChat" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">OpenBusinessChat</a>
+          {privacyNotice}{avatarActive && " Voice sessions are processed by our avatar provider and may be recorded."} {t.poweredBy} <a href="https://github.com/Hemang-ai/OpenChat" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600">OpenBusinessChat</a>
         </p>
       </div>
     </div>
