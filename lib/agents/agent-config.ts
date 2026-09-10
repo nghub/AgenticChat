@@ -11,8 +11,17 @@
 
 export type ValidatorMode = "off" | "audit" | "block";
 
+export type AgentType = "support" | "discovery" | "neutral";
+export type KpiProfile = "resolution" | "conversion" | "neutral";
+
 export interface AgentConfig {
   version: 1;
+  /** Which agent this bot is. Drives objective wording and the KPI dashboard. */
+  type: AgentType;
+  /** Explicit, inspectable goal + success state (PRD R1.1 / R2.1). */
+  objective: { goal: string; successState: string };
+  /** Which metric the dashboard treats as primary (Probe #7). */
+  kpiProfile: KpiProfile;
   persona: {
     /** "DentalPilot's AI assistant for its dental supply marketplace" */
     role: string;
@@ -56,6 +65,9 @@ export interface AgentConfig {
 
 export const DEFAULT_AGENT_CONFIG: AgentConfig = {
   version: 1,
+  type: "neutral",
+  objective: { goal: "Answer the visitor's question accurately from the provided sources, or hand off when you cannot.", successState: "question_answered" },
+  kpiProfile: "neutral",
   persona: {
     role: "the AI assistant for this business",
     style: "Friendly, upbeat and to the point - a helpful colleague at the counter, not a form letter.",
@@ -109,8 +121,14 @@ export function normalizeAgentConfig(input: unknown): AgentConfig {
         .slice(0, 12)
     : d.persona.smallTalk;
   const mode = r.validatorMode;
+  const type = o.type === "support" || o.type === "discovery" ? o.type : "neutral";
+  const kpi = o.kpiProfile === "resolution" || o.kpiProfile === "conversion" ? o.kpiProfile : "neutral";
+  const obj = (o.objective && typeof o.objective === "object" ? o.objective : {}) as Record<string, unknown>;
   return {
     version: 1,
+    type,
+    objective: { goal: str(obj.goal, d.objective.goal).slice(0, 400), successState: str(obj.successState, d.objective.successState).slice(0, 80) },
+    kpiProfile: kpi,
     persona: {
       role: str(p.role, d.persona.role).slice(0, 300),
       style: str(p.style, d.persona.style).slice(0, 600),
@@ -155,6 +173,7 @@ export function composeAgentPrompt(config: AgentConfig, botName: string): string
   const c = config;
   const out: string[] = [];
   out.push(`You are ${botName}, ${c.persona.role}. Never imply you are a human employee; if someone asks who or what you are, say you are ${botName}, an AI assistant. You do not need to repeat that in every message.`);
+  if (c.objective.goal) out.push(`OBJECTIVE: ${c.objective.goal}`);
 
   const persona: string[] = [`PERSONA: ${c.persona.style}`];
   if (c.persona.alwaysFriendly) persona.push(`${botName} is always friendly and helpful - including when the answer is no. A refusal, a policy limit or an escalation is delivered warmly, with the reason in one plain sentence and a concrete next step, never a flat "no".`);

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db/client";
 import { getLLMProvider, AIConfig } from "@/lib/ai/provider";
 import { Prisma } from "@prisma/client";
+import { rerankChunks, rerankEnabled } from "./rerank";
 
 type ChunkRow = {
   id: string;
@@ -41,6 +42,9 @@ export async function retrieveRelevantChunks(
   const provider = getLLMProvider(aiConfig);
   const queryEmbedding = await provider.embed(query);
   const embeddingStr = `[${queryEmbedding.join(",")}]`;
+  // Over-fetch candidates when a rerank stage will re-order them (R0.3/R2.9).
+  const rerank = rerankEnabled();
+  const fetchK = rerank ? Math.min(topK * 4, 40) : topK;
 
   const chunks = sourceIds ? await db.$queryRaw<ChunkRow[]>`
     SELECT
@@ -57,7 +61,7 @@ export async function retrieveRelevantChunks(
       AND ks.status = 'COMPLETED'
       AND dc.embedding IS NOT NULL
     ORDER BY dc.embedding::vector <=> ${embeddingStr}::vector
-    LIMIT ${topK}
+    LIMIT ${fetchK}
   ` : await db.$queryRaw<ChunkRow[]>`
     SELECT
       dc.id,
@@ -80,10 +84,10 @@ export async function retrieveRelevantChunks(
       AND (ks."expiresAt" IS NULL OR ks."expiresAt" >= NOW())
       AND dc.embedding IS NOT NULL
     ORDER BY dc.embedding::vector <=> ${embeddingStr}::vector
-    LIMIT ${topK}
+    LIMIT ${fetchK}
   `;
 
-  return chunks.map((c) => ({
+  const mapped = chunks.map((c) => ({
     id: c.id,
     content: c.content,
     chunkIndex: c.chunk_index,
@@ -96,4 +100,5 @@ export async function retrieveRelevantChunks(
     citationVisibility: c.citation_visibility,
     similarity: c.similarity,
   }));
+  return rerank ? rerankChunks(query, mapped, topK) : mapped;
 }

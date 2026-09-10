@@ -17,6 +17,7 @@ import { resolvePublicBotKey } from "@/lib/bots/public-key";
 import { voiceGreeting } from "@/lib/agents/voice-greeting";
 import { validateAnswer } from "@/lib/agents/output-validator";
 import { normalizeAgentConfig } from "@/lib/agents/agent-config";
+import { redactPii } from "@/lib/security/pii";
 import { resolveResponseLanguage } from "@/lib/i18n/languages";
 import { getMessages } from "@/lib/i18n/messages";
 
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       }
       const answer = await voiceGreeting(bot, history, conversation.locale, conversation.id);
       const saved = await db.message.create({
-        data: { conversationId: conversation.id, role: "ASSISTANT", content: answer, source: "VOICE" },
+        data: { conversationId: conversation.id, role: "ASSISTANT", content: redactPii(answer), source: "VOICE" },
       });
       return NextResponse.json(
         { answer, sessionId: conversation.sessionId, messageId: saved.id, contextual: true, isRefused: false, locale: conversation.locale, citations: [], handoff: null },
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
     }));
 
     await db.message.create({
-      data: { conversationId: conversation.id, role: "USER", content: message, source },
+      data: { conversationId: conversation.id, role: "USER", content: redactPii(message), source },
     });
 
     const startedAt = Date.now();
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
       data: {
         conversationId: conversation.id,
         role: "ASSISTANT",
-        content: result.answer,
+        content: redactPii(result.answer),
         source, // the answer to a spoken turn was spoken back
         isGrounded: result.isGrounded,
         isRefused: result.isRefused,

@@ -32,6 +32,12 @@ const KNOWLEDGE_DIR = path.join(process.cwd(), "docs/avatar-poc/knowledge");
  */
 const AGENT_CONFIG: AgentConfig = {
   version: 1,
+  type: "support",
+  objective: {
+    goal: "Resolve the customer's issue in as few turns as possible - answer product, order, shipping, return and warranty questions, and complete returns or escalations - without a human where safe.",
+    successState: "resolved_without_human",
+  },
+  kpiProfile: "resolution",
   persona: {
     role: "the AI assistant for the DentalPilot Marketplace (a POC with synthetic data)",
     style: "Friendly, upbeat and to the point - a helpful colleague at the counter, not a form letter.",
